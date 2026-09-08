@@ -231,3 +231,45 @@ test('comparison states the direction and the gap in one sentence', async () => 
   assert.equal(c['difference'], 2100 - 1900);
   assert.match(String(c['spoken']), /more than/);
 });
+
+// ── MCP App widget ──────────────────────────────────────────────────────────
+
+test('table_explain advertises a UI resource, and the resource is servable', async () => {
+  const list = await readRpc(await post({ jsonrpc: '2.0', id: 20, method: 'tools/list' }));
+  const tools = (list['result'] as { tools: { name: string; _meta?: Record<string, unknown> }[] }).tools;
+  const explain = tools.find((t) => t.name === 'table_explain');
+  assert.equal(
+    explain?._meta?.['ui/resourceUri'],
+    'ui://landmark/explain',
+    'the flat slash key is the contract, not a nested _meta.ui.resourceUri',
+  );
+
+  const res = await readRpc(
+    await post({ jsonrpc: '2.0', id: 21, method: 'resources/read', params: { uri: 'ui://landmark/explain' } }),
+  );
+  const contents = (res['result'] as { contents: { mimeType: string; text: string }[] }).contents;
+  assert.equal(contents[0]!.mimeType, 'text/html;profile=mcp-app');
+  assert.match(contents[0]!.text, /<table|createElement\('table'\)/);
+  assert.ok(!/https?:\/\//.test(contents[0]!.text), 'the widget must not fetch anything');
+});
+
+test('explain ships the surrounding grid so a highlight has neighbours', async () => {
+  const q = await call('table_query', {
+    table_id: '04-title-and-vmerge',
+    filters: [{ column: 'Department', op: 'eq', value: 'Engineering' }],
+    aggregate: 'sum',
+    aggregate_column: 'Amount',
+  });
+  const e = await call('table_explain', { answer_id: q['answer_id'] });
+
+  const grid = e['grid'] as { columns: unknown[]; rows: { cells: { address: string }[] }[] };
+  assert.ok(grid, 'no grid means the widget has nothing to draw');
+  assert.equal(grid.columns.length, 3);
+  assert.equal(grid.rows.length, 5, 'the whole small region, not just the counted rows');
+
+  const addresses = grid.rows.flatMap((r) => r.cells.map((c) => c.address));
+  for (const cell of e['cells'] as string[]) {
+    assert.ok(addresses.includes(cell), `highlighted ${cell} is not in the grid it must line up with`);
+  }
+  assert.equal(e['title'], 'FY2026 Departmental Budget');
+});

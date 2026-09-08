@@ -19,6 +19,7 @@ import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js';
 import { assertIndex, type LandmarkIndex } from './indexfmt.ts';
 import { registerTools } from './mcp/tools.ts';
 import { MemoryStore, type Store } from './mcp/store.ts';
+import { registerWidget } from './mcp/widget.ts';
 
 export const SERVER_NAME = 'landmark';
 export const SERVER_VERSION = '0.1.0';
@@ -41,7 +42,8 @@ export function createServer(index: LandmarkIndex, store: Store): McpServer {
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     {
-      capabilities: { tools: {} },
+      // `resources` is declared because the explain widget is served as one.
+      capabilities: { tools: {}, resources: {} },
       instructions:
         'This table is being read aloud to someone who cannot see it. Describe a table before ' +
         'querying it, ask rather than read whenever a question can be aggregated, speak the ' +
@@ -50,6 +52,7 @@ export function createServer(index: LandmarkIndex, store: Store): McpServer {
     },
   );
   registerTools(server, index, store);
+  registerWidget(server, index);
   return server;
 }
 

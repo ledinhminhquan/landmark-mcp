@@ -40,6 +40,7 @@ import {
   HEADLINE_WORD_LIMIT,
 } from '../voice/speak.ts';
 import type { Store } from './store.ts';
+import { EXPLAIN_UI_URI, UI_RESOURCE_KEY } from './widget.ts';
 
 const PAGE = 5;
 
@@ -131,6 +132,47 @@ function locate(index: LandmarkIndex, tableId: string, sheet?: string): Located 
     );
   }
   return { table, region };
+}
+
+/**
+ * The slice of the sheet the widget draws, addressed so highlights line up.
+ *
+ * Capped at 40 rows: a highlighted cell needs its neighbours to mean anything, but
+ * nobody needs a thousand-row grid inside an explanation, and a Worker response is not
+ * the place to ship one. When highlights exist, the window is centred on them rather
+ * than starting at the top, so the evidence is actually on screen.
+ */
+function buildGrid(region: IndexRegion, highlighted: readonly string[]): {
+  columns: { name: string; letter: string }[];
+  rows: { number: number; label: string | null; cells: { address: string; value: unknown }[] }[];
+} {
+  const MAX_ROWS = 40;
+  const rowOf = (addr: string): number => Number.parseInt(addr.replace(/^[A-Z]+/, ''), 10) - 1;
+  const hits = highlighted.map(rowOf).filter((n) => Number.isFinite(n));
+
+  let start = 0;
+  if (hits.length && region.rowCount > MAX_ROWS) {
+    const first = Math.min(...hits) - region.firstDataRow;
+    start = Math.max(0, Math.min(first - 2, region.rowCount - MAX_ROWS));
+  }
+  const end = Math.min(region.rowCount, start + MAX_ROWS);
+
+  const rows = [];
+  for (let i = start; i < end; i++) {
+    rows.push({
+      number: region.firstDataRow + i + 1,
+      label: rowLabel(region, i),
+      cells: region.columns.map((c) => ({
+        address: `${c.col}${region.firstDataRow + i + 1}`,
+        value: region.rows[i]?.[c.i] ?? null,
+      })),
+    });
+  }
+
+  return {
+    columns: region.columns.map((c) => ({ name: c.spoken, letter: c.col })),
+    rows,
+  };
 }
 
 /** Rows are spoken as label plus columns, never as coordinates. */
@@ -377,6 +419,11 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
   server.registerTool(
     'table_explain',
     {
+      // The only tool with a visual surface, and the only one that warrants one:
+      // a person with residual sight, or a sighted colleague reading along, can see
+      // the counted cells lit up instead of taking the sentence on faith. Hosts that
+      // do not understand MCP Apps ignore this key and lose nothing.
+      _meta: { [UI_RESOURCE_KEY]: EXPLAIN_UI_URI },
       title: 'Show where an answer came from',
       description:
         'Show exactly where a previous answer came from. Pass the answer identifier you were given ' +
@@ -399,13 +446,26 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         );
       }
       const cells = a.cells.slice(0, limit);
-      return ok(speakExplain(cells, a.cellCount, a.path, a.excluded, a.sheet), {
+      const spoken = speakExplain(cells, a.cellCount, a.path, a.excluded, a.sheet);
+
+      // The widget needs the surrounding region, not just the cell list — a
+      // highlighted cell with no neighbours conveys nothing. Bounded so a large
+      // sheet cannot turn an explanation into a payload.
+      // A missing region is not worth failing the explanation over — the spoken
+      // answer stands on its own and the widget is the optional half.
+      const located = guard(() => locate(index, a.tableId, a.regionId));
+      const visual = isFailure(located)
+        ? null
+        : { grid: buildGrid(located.region, a.cells), title: located.region.title };
+
+      return ok(spoken, {
         sheet: a.sheet,
         cells,
         total_cells: a.cellCount,
         header_path: a.path,
         excluded: a.excluded.map((e) => ({ address: e.address, reason: e.reason })),
         more_available: a.cells.length > cells.length,
+        ...(visual ?? {}),
       });
     },
   );
