@@ -19,7 +19,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "demo": "node --experimental-strip-types examples/spoken-demo.ts",
     "ingest": "node --experimental-strip-types src/ingest/cli.ts",
-    "fixtures": "node --experimental-strip-types test/fixtures/make.ts"
+    "fixtures": "node --experimental-strip-types test/fixtures/make.ts",
+    "serve": "node --experimental-strip-types src/local.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
