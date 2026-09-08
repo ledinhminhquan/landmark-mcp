@@ -1,4 +1,8 @@
-# TableTalk — Implementation-Ready Build Spec
+# Landmark — Implementation-Ready Build Spec
+
+> **Name:** the repo is `landmark` (ARIA "landmark" is the accessibility term of art for an
+> orientation point — exactly what this provides for a table). The research agent drafted this
+> spec under the working name TableTalk; it has been renamed throughout.
 **Amazon Developer Hackathon 2026 · Alexa+ track · solo build · Vietnam · 2026-09-08 → 2026-10-23 12:00 PT (2026-10-24 02:00 GMT+7)**
 
 Every version number, package name and URL below traces to the verified research. Anything not traceable is explicitly marked **UNVERIFIED** — do not treat those as facts, confirm them on day 1.
@@ -35,7 +39,7 @@ What is empty, and was verified by direct paged queries against `registry.modelc
 
 ### The paragraph
 
-Four out of five data tables on the live web carry no valid header markup, and the US federal government states in writing that Excel cannot make complex tables accessible at all. So a blind analyst handed a budget workbook does not read it — they traverse it, cell by cell, holding column headers in working memory while a synthesiser reads out "B7, 4820". TableTalk is a self-hosted MCP server that turns any spreadsheet or CSV into something you can *ask*. It infers the structure that the file never declared — detecting header rows, virtually un-merging merged header blocks, and reconstructing a full header path for any cell, so "4820" comes back as "2026, Q3, EMEA, Revenue: 4,820." Every answer it speaks carries its own provenance: the value, the cells it came from, the rows it excluded, and a follow-up tool that reads those exact source cells back on request, because the CHI 2026 study of blind spreadsheet users found they never fully trust an AI number they cannot verify. And because the answer arrives through a speaker rather than a screen, the server governs its own result size — shape and aggregates first, at most five items, an explicit continuation token for "tell me more" — instead of reproducing over audio the exact linearisation problem it set out to fix.
+Four out of five data tables on the live web carry no valid header markup, and the US federal government states in writing that Excel cannot make complex tables accessible at all. So a blind analyst handed a budget workbook does not read it — they traverse it, cell by cell, holding column headers in working memory while a synthesiser reads out "B7, 4820". Landmark is a self-hosted MCP server that turns any spreadsheet or CSV into something you can *ask*. It infers the structure that the file never declared — detecting header rows, virtually un-merging merged header blocks, and reconstructing a full header path for any cell, so "4820" comes back as "2026, Q3, EMEA, Revenue: 4,820." Every answer it speaks carries its own provenance: the value, the cells it came from, the rows it excluded, and a follow-up tool that reads those exact source cells back on request, because the CHI 2026 study of blind spreadsheet users found they never fully trust an AI number they cannot verify. And because the answer arrives through a speaker rather than a screen, the server governs its own result size — shape and aggregates first, at most five items, an explicit continuation token for "tell me more" — instead of reproducing over audio the exact linearisation problem it set out to fix.
 
 ### The accessibility failure it fixes
 
@@ -398,7 +402,7 @@ import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js';
 if (LATEST_PROTOCOL_VERSION !== '2025-11-25') {
   throw new Error(`Expected MCP 2025-11-25, SDK reports ${LATEST_PROTOCOL_VERSION}`);
 }
-console.log(`TableTalk MCP · spec ${LATEST_PROTOCOL_VERSION} · Streamable HTTP`);
+console.log(`Landmark MCP · spec ${LATEST_PROTOCOL_VERSION} · Streamable HTTP`);
 ```
 
 ### Transport setup
@@ -418,7 +422,7 @@ import { registerTableTools } from './tools.js';
 
 function buildServer(): McpServer {
   const server = new McpServer(
-    { name: 'tabletalk', version: '0.1.0', title: 'TableTalk' },
+    { name: 'tabletalk', version: '0.1.0', title: 'Landmark' },
     {
       capabilities: { logging: {} },
       instructions:
