@@ -186,13 +186,23 @@ export function scoreHeaderRow(
 
   // Signals 2-4 are weak on their own: an all-numeric first row over numeric data
   // scores well on distinctness, density and brevity while being almost certainly
-  // data. Type discontinuity is the only strong signal, so let its absence veto.
+  // data. Type discontinuity is the only strong signal, so let its absence veto —
+  // but only where the signal could have fired at all.
+  //
+  // In a region that is text from top to bottom (a notes table, a status list) there
+  // is nothing for a type discontinuity to be made of. Penalising the row for failing
+  // to demonstrate a distinction the data cannot express reads absence of evidence as
+  // evidence of absence, and loses the header on every all-text table.
+  const typedBelow = body.some((row) =>
+    row.some((v) => !isBlank(v) && (asNumber(v) !== null || asDate(v) !== null)),
+  );
+
   const allNumeric = cells.every((c) => asNumber(c) !== null);
   if (allNumeric) {
     // A row like "2021 2022 2023" genuinely is an ambiguous case even for a human.
     // We report low confidence and let the caller override rather than guess.
     score *= 0.3;
-  } else if (comparable > 0 && discontinuities / comparable < 0.3) {
+  } else if (typedBelow && comparable > 0 && discontinuities / comparable < 0.3) {
     score *= 0.6;
   }
 
