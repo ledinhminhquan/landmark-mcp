@@ -173,10 +173,13 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
       const page = index.tables.slice(offset, offset + PAGE);
       const more = offset + page.length < index.tables.length;
 
+      const remaining = index.tables.length - offset - page.length;
       const spoken = page.length
         ? capWords(
             `You have ${speakList(page.map((t) => t.title))}.` +
-              (more ? ` There are ${index.tables.length - offset - page.length} more.` : ''),
+              // "There are 1 more" is the kind of thing you only notice once it is
+              // spoken aloud, which is the entire argument for testing by listening.
+              (more ? ` There ${remaining === 1 ? 'is 1 more' : `are ${remaining} more`}.` : ''),
             HEADLINE_WORD_LIMIT,
           )
         : 'There are no tables loaded.';
