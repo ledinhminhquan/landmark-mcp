@@ -1,0 +1,42 @@
+{
+  "name": "landmark-mcp",
+  "version": "0.1.0",
+  "description": "An MCP server that lets blind and low-vision users ask questions of a spreadsheet by voice, instead of traversing it cell by cell.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "main": "./dist/index.js",
+  "bin": {
+    "landmark-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --watch --experimental-strip-types src/index.ts",
+    "start": "node dist/index.js",
+    "test": "node --test --experimental-strip-types test/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "demo": "node --experimental-strip-types examples/spoken-demo.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "exceljs": "4.4.0",
+    "papaparse": "5.7.0",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "@types/papaparse": "5.3.15",
+    "typescript": "5.7.2"
+  },
+  "keywords": [
+    "mcp",
+    "accessibility",
+    "a11y",
+    "screen-reader",
+    "spreadsheet",
+    "alexa",
+    "voice"
+  ]
+}
