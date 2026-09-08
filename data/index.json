@@ -1,0 +1,839 @@
+{
+ "version": 1,
+ "tables": [
+  {
+   "id": "01-flat",
+   "title": "01 flat",
+   "format": "xlsx",
+   "sourceName": "01-flat.xlsx",
+   "ingestedAt": "2026-09-08T18:27:31.612Z",
+   "regions": [
+    {
+     "id": "sales.t1",
+     "sheet": "Sales",
+     "title": null,
+     "headerRows": [
+      0
+     ],
+     "headerConfidence": 1,
+     "firstDataRow": 1,
+     "firstCol": 0,
+     "rowCount": 5,
+     "columns": [
+      {
+       "i": 0,
+       "path": [
+        "Region"
+       ],
+       "spoken": "Region",
+       "col": "A",
+       "kind": "text",
+       "nonEmpty": 5,
+       "empty": 0,
+       "distinct": 3
+      },
+      {
+       "i": 1,
+       "path": [
+        "Rep"
+       ],
+       "spoken": "Rep",
+       "col": "B",
+       "kind": "text",
+       "nonEmpty": 5,
+       "empty": 0,
+       "distinct": 5
+      },
+      {
+       "i": 2,
+       "path": [
+        "Revenue"
+       ],
+       "spoken": "Revenue",
+       "col": "C",
+       "kind": "number",
+       "nonEmpty": 5,
+       "empty": 0,
+       "distinct": 5,
+       "min": 3900,
+       "max": 21000,
+       "sum": 61050,
+       "mean": 12210,
+       "nonNumeric": 0
+      },
+      {
+       "i": 3,
+       "path": [
+        "Closed"
+       ],
+       "spoken": "Closed",
+       "col": "D",
+       "kind": "date",
+       "nonEmpty": 5,
+       "empty": 0,
+       "distinct": 5
+      }
+     ],
+     "rows": [
+      [
+       "North",
+       "Anh",
+       12400,
+       "2026-07-04T00:00:00.000Z"
+      ],
+      [
+       "North",
+       "Bảo",
+       8150,
+       "2026-07-19T00:00:00.000Z"
+      ],
+      [
+       "South",
+       "Chi",
+       21000,
+       "2026-08-02T00:00:00.000Z"
+      ],
+      [
+       "South",
+       "Dũng",
+       3900,
+       "2026-08-27T00:00:00.000Z"
+      ],
+      [
+       "East",
+       "An",
+       15600,
+       "2026-09-01T00:00:00.000Z"
+      ]
+     ],
+     "inherited": [],
+     "labelColumn": 1,
+     "ambiguousColumns": []
+    }
+   ],
+   "warnings": []
+  },
+  {
+   "id": "02-stacked-header",
+   "title": "02 stacked header",
+   "format": "xlsx",
+   "sourceName": "02-stacked-header.xlsx",
+   "ingestedAt": "2026-09-08T18:27:31.617Z",
+   "regions": [
+    {
+     "id": "quarterly.t1",
+     "sheet": "Quarterly",
+     "title": null,
+     "headerRows": [
+      0,
+      1
+     ],
+     "headerConfidence": 1,
+     "firstDataRow": 2,
+     "firstCol": 0,
+     "rowCount": 3,
+     "columns": [
+      {
+       "i": 0,
+       "path": [
+        "Region"
+       ],
+       "spoken": "Region",
+       "col": "A",
+       "kind": "text",
+       "nonEmpty": 3,
+       "empty": 0,
+       "distinct": 3
+      },
+      {
+       "i": 1,
+       "path": [
+        "Q1",
+        "Revenue"
+       ],
+       "spoken": "Q1, Revenue",
+       "col": "B",
+       "kind": "number",
+       "nonEmpty": 3,
+       "empty": 0,
+       "distinct": 3,
+       "min": 700,
+       "max": 1200,
+       "sum": 2800,
+       "mean": 933.3333333333334,
+       "nonNumeric": 0
+      },
+      {
+       "i": 2,
+       "path": [
+        "Q2",
+        "Revenue"
+       ],
+       "spoken": "Q2, Revenue",
+       "col": "C",
+       "kind": "number",
+       "nonEmpty": 3,
+       "empty": 0,
+       "distinct": 3,
+       "min": 820,
+       "max": 1400,
+       "sum": 3170,
+       "mean": 1056.6666666666667,
+       "nonNumeric": 0
+      },
+      {
+       "i": 3,
+       "path": [
+        "Q3",
+        "Revenue"
+       ],
+       "spoken": "Q3, Revenue",
+       "col": "D",
+       "kind": "number",
+       "nonEmpty": 3,
+       "empty": 0,
+       "distinct": 3,
+       "min": 910,
+       "max": 1500,
+       "sum": 3510,
+       "mean": 1170,
+       "nonNumeric": 0
+      }
+     ],
+     "rows": [
+      [
+       "North",
+       1200,
+       1400,
+       1500
+      ],
+      [
+       "South",
+       900,
+       950,
+       1100
+      ],
+      [
+       "East",
+       700,
+       820,
+       910
+      ]
+     ],
+     "inherited": [],
+     "labelColumn": 0,
+     "ambiguousColumns": []
+    }
+   ],
+   "warnings": []
+  },
+  {
+   "id": "03-merged-header",
+   "title": "03 merged header",
+   "format": "xlsx",
+   "sourceName": "03-merged-header.xlsx",
+   "ingestedAt": "2026-09-08T18:27:31.623Z",
+   "regions": [
+    {
+     "id": "compare.t1",
+     "sheet": "Compare",
+     "title": null,
+     "headerRows": [
+      0,
+      1,
+      2
+     ],
+     "headerConfidence": 1,
+     "firstDataRow": 3,
+     "firstCol": 0,
+     "rowCount": 2,
+     "columns": [
+      {
+       "i": 0,
+       "path": [
+        "Region"
+       ],
+       "spoken": "Region",
+       "col": "A",
+       "kind": "text",
+       "nonEmpty": 2,
+       "empty": 0,
+       "distinct": 2
+      },
+      {
+       "i": 1,
+       "path": [
+        "2026",
+        "Q1",
+        "Revenue"
+       ],
+       "spoken": "2026, Q1, Revenue",
+       "col": "B",
+       "kind": "number",
+       "nonEmpty": 2,
+       "empty": 0,
+       "distinct": 2,
+       "min": 900,
+       "max": 1200,
+       "sum": 2100,
+       "mean": 1050,
+       "nonNumeric": 0
+      },
+      {
+       "i": 2,
+       "path": [
+        "2026",
+        "Q2",
+        "Revenue"
+       ],
+       "spoken": "2026, Q2, Revenue",
+       "col": "C",
+       "kind": "number",
+       "nonEmpty": 2,
+       "empty": 0,
+       "distinct": 2,
+       "min": 950,
+       "max": 1400,
+       "sum": 2350,
+       "mean": 1175,
+       "nonNumeric": 0
+      },
+      {
+       "i": 3,
+       "path": [
+        "2025",
+        "Q1",
+        "Revenue"
+       ],
+       "spoken": "2025, Q1, Revenue",
+       "col": "D",
+       "kind": "number",
+       "nonEmpty": 2,
+       "empty": 0,
+       "distinct": 2,
+       "min": 800,
+       "max": 1100,
+       "sum": 1900,
+       "mean": 950,
+       "nonNumeric": 0
+      },
+      {
+       "i": 4,
+       "path": [
+        "2025",
+        "Q2",
+        "Revenue"
+       ],
+       "spoken": "2025, Q2, Revenue",
+       "col": "E",
+       "kind": "number",
+       "nonEmpty": 2,
+       "empty": 0,
+       "distinct": 2,
+       "min": 850,
+       "max": 1000,
+       "sum": 1850,
+       "mean": 925,
+       "nonNumeric": 0
+      }
+     ],
+     "rows": [
+      [
+       "North",
+       1200,
+       1400,
+       1100,
+       1000
+      ],
+      [
+       "South",
+       900,
+       950,
+       800,
+       850
+      ]
+     ],
+     "inherited": [],
+     "labelColumn": 0,
+     "ambiguousColumns": []
+    }
+   ],
+   "warnings": []
+  },
+  {
+   "id": "04-title-and-vmerge",
+   "title": "04 title and vmerge",
+   "format": "xlsx",
+   "sourceName": "04-title-and-vmerge.xlsx",
+   "ingestedAt": "2026-09-08T18:27:31.640Z",
+   "regions": [
+    {
+     "id": "budget.t1",
+     "sheet": "Budget",
+     "title": "FY2026 Departmental Budget",
+     "headerRows": [
+      1
+     ],
+     "headerConfidence": 1,
+     "firstDataRow": 2,
+     "firstCol": 0,
+     "rowCount": 5,
+     "columns": [
+      {
+       "i": 0,
+       "path": [
+        "Department"
+       ],
+       "spoken": "Department",
+       "col": "A",
+       "kind": "category",
+       "nonEmpty": 5,
+       "empty": 0,
+       "distinct": 2,
+       "categories": [
+        "Design",
+        "Engineering"
+       ]
+      },
+      {
+       "i": 1,
+       "path": [
+        "Line item"
+       ],
+       "spoken": "Line item",
+       "col": "B",
+       "kind": "text",
+       "nonEmpty": 5,
+       "empty": 0,
+       "distinct": 4
+      },
+      {
+       "i": 2,
+       "path": [
+        "Amount"
+       ],
+       "spoken": "Amount",
+       "col": "C",
+       "kind": "number",
+       "nonEmpty": 5,
+       "empty": 0,
+       "distinct": 5,
+       "min": 18000,
+       "max": 480000,
+       "sum": 794000,
+       "mean": 158800,
+       "nonNumeric": 0
+      }
+     ],
+     "rows": [
+      [
+       "Engineering",
+       "Salaries",
+       480000
+      ],
+      [
+       "Engineering",
+       "Tooling",
+       62000
+      ],
+      [
+       "Engineering",
+       "Travel",
+       18000
+      ],
+      [
+       "Design",
+       "Salaries",
+       210000
+      ],
+      [
+       "Design",
+       "Software",
+       24000
+      ]
+     ],
+     "inherited": [
+      {
+       "at": "A4",
+       "from": "A3"
+      },
+      {
+       "at": "A5",
+       "from": "A3"
+      },
+      {
+       "at": "A7",
+       "from": "A6"
+      }
+     ],
+     "labelColumn": 1,
+     "ambiguousColumns": []
+    }
+   ],
+   "warnings": []
+  },
+  {
+   "id": "05-three-regions",
+   "title": "05 three regions",
+   "format": "xlsx",
+   "sourceName": "05-three-regions.xlsx",
+   "ingestedAt": "2026-09-08T18:27:31.646Z",
+   "regions": [
+    {
+     "id": "mixed.t1",
+     "sheet": "Mixed",
+     "title": null,
+     "headerRows": [
+      0
+     ],
+     "headerConfidence": 1,
+     "firstDataRow": 1,
+     "firstCol": 0,
+     "rowCount": 2,
+     "columns": [
+      {
+       "i": 0,
+       "path": [
+        "Product"
+       ],
+       "spoken": "Product",
+       "col": "A",
+       "kind": "text",
+       "nonEmpty": 2,
+       "empty": 0,
+       "distinct": 2
+      },
+      {
+       "i": 1,
+       "path": [
+        "Units"
+       ],
+       "spoken": "Units",
+       "col": "B",
+       "kind": "number",
+       "nonEmpty": 2,
+       "empty": 0,
+       "distinct": 2,
+       "min": 45,
+       "max": 120,
+       "sum": 165,
+       "mean": 82.5,
+       "nonNumeric": 0
+      }
+     ],
+     "rows": [
+      [
+       "Widget",
+       120
+      ],
+      [
+       "Gadget",
+       45
+      ]
+     ],
+     "inherited": [],
+     "labelColumn": 0,
+     "ambiguousColumns": []
+    },
+    {
+     "id": "mixed.t2",
+     "sheet": "Mixed",
+     "title": null,
+     "headerRows": [
+      4
+     ],
+     "headerConfidence": 1,
+     "firstDataRow": 5,
+     "firstCol": 0,
+     "rowCount": 2,
+     "columns": [
+      {
+       "i": 0,
+       "path": [
+        "Region"
+       ],
+       "spoken": "Region",
+       "col": "A",
+       "kind": "text",
+       "nonEmpty": 2,
+       "empty": 0,
+       "distinct": 2
+      },
+      {
+       "i": 1,
+       "path": [
+        "Target"
+       ],
+       "spoken": "Target",
+       "col": "B",
+       "kind": "number",
+       "nonEmpty": 2,
+       "empty": 0,
+       "distinct": 2,
+       "min": 9000,
+       "max": 10000,
+       "sum": 19000,
+       "mean": 9500,
+       "nonNumeric": 0
+      },
+      {
+       "i": 2,
+       "path": [
+        "Actual"
+       ],
+       "spoken": "Actual",
+       "col": "C",
+       "kind": "number",
+       "nonEmpty": 2,
+       "empty": 0,
+       "distinct": 2,
+       "min": 3900,
+       "max": 12400,
+       "sum": 16300,
+       "mean": 8150,
+       "nonNumeric": 0
+      }
+     ],
+     "rows": [
+      [
+       "North",
+       10000,
+       12400
+      ],
+      [
+       "South",
+       9000,
+       3900
+      ]
+     ],
+     "inherited": [],
+     "labelColumn": 0,
+     "ambiguousColumns": []
+    },
+    {
+     "id": "mixed.t3",
+     "sheet": "Mixed",
+     "title": null,
+     "headerRows": [
+      8
+     ],
+     "headerConfidence": 1,
+     "firstDataRow": 9,
+     "firstCol": 0,
+     "rowCount": 1,
+     "columns": [
+      {
+       "i": 0,
+       "path": [
+        "Note"
+       ],
+       "spoken": "Note",
+       "col": "A",
+       "kind": "text",
+       "nonEmpty": 1,
+       "empty": 0,
+       "distinct": 1
+      },
+      {
+       "i": 1,
+       "path": [
+        "Status"
+       ],
+       "spoken": "Status",
+       "col": "B",
+       "kind": "text",
+       "nonEmpty": 1,
+       "empty": 0,
+       "distinct": 1
+      }
+     ],
+     "rows": [
+      [
+       "Q3 close",
+       "pending"
+      ]
+     ],
+     "inherited": [],
+     "labelColumn": 0,
+     "ambiguousColumns": []
+    }
+   ],
+   "warnings": [
+    "This file holds 3 separate tables. Say which one you want, or ask me to describe them."
+   ]
+  },
+  {
+   "id": "06-countries",
+   "title": "06 countries",
+   "format": "csv",
+   "sourceName": "06-countries.csv",
+   "ingestedAt": "2026-09-08T18:27:31.649Z",
+   "regions": [
+    {
+     "id": "06-countries.t1",
+     "sheet": "06-countries",
+     "title": null,
+     "headerRows": [
+      0
+     ],
+     "headerConfidence": 1,
+     "firstDataRow": 1,
+     "firstCol": 0,
+     "rowCount": 8,
+     "columns": [
+      {
+       "i": 0,
+       "path": [
+        "Country"
+       ],
+       "spoken": "Country",
+       "col": "A",
+       "kind": "text",
+       "nonEmpty": 8,
+       "empty": 0,
+       "distinct": 8
+      },
+      {
+       "i": 1,
+       "path": [
+        "Population"
+       ],
+       "spoken": "Population",
+       "col": "B",
+       "kind": "number",
+       "nonEmpty": 8,
+       "empty": 0,
+       "distinct": 8,
+       "min": 5474360,
+       "max": 277534122,
+       "sum": 805105739,
+       "mean": 100638217.375,
+       "nonNumeric": 0
+      },
+      {
+       "i": 2,
+       "path": [
+        "GDP per capita (USD)"
+       ],
+       "spoken": "GDP per capita (usd)",
+       "col": "C",
+       "kind": "number",
+       "nonEmpty": 8,
+       "empty": 0,
+       "distinct": 8,
+       "min": 1596,
+       "max": 87962,
+       "sum": 137328,
+       "mean": 17166,
+       "nonNumeric": 0
+      },
+      {
+       "i": 3,
+       "path": [
+        "Region"
+       ],
+       "spoken": "Region",
+       "col": "D",
+       "kind": "category",
+       "nonEmpty": 8,
+       "empty": 0,
+       "distinct": 4,
+       "categories": [
+        "Africa",
+        "Americas",
+        "Asia",
+        "Europe"
+       ]
+      }
+     ],
+     "rows": [
+      [
+       "Vietnam",
+       "100352192",
+       "4347",
+       "Asia"
+      ],
+      [
+       "Thailand",
+       "71801279",
+       "7297",
+       "Asia"
+      ],
+      [
+       "Indonesia",
+       "277534122",
+       "4788",
+       "Asia"
+      ],
+      [
+       "Kenya",
+       "55100586",
+       "2099",
+       "Africa"
+      ],
+      [
+       "Nigeria",
+       "223804632",
+       "1596",
+       "Africa"
+      ],
+      [
+       "Peru",
+       "34352719",
+       "7126",
+       "Americas"
+      ],
+      [
+       "Norway",
+       "5474360",
+       "87962",
+       "Europe"
+      ],
+      [
+       "Poland",
+       "36685849",
+       "22113",
+       "Europe"
+      ]
+     ],
+     "inherited": [],
+     "labelColumn": 0,
+     "ambiguousColumns": []
+    },
+    {
+     "id": "06-countries.t2",
+     "sheet": "06-countries",
+     "title": null,
+     "headerRows": [],
+     "headerConfidence": 0,
+     "firstDataRow": 10,
+     "firstCol": 0,
+     "rowCount": 1,
+     "columns": [
+      {
+       "i": 0,
+       "path": [],
+       "spoken": "column 1",
+       "col": "A",
+       "kind": "text",
+       "nonEmpty": 1,
+       "empty": 0,
+       "distinct": 1
+      }
+     ],
+     "rows": [
+      [
+       "Source: illustrative figures for testing only"
+      ]
+     ],
+     "inherited": [],
+     "labelColumn": 0,
+     "ambiguousColumns": []
+    }
+   ],
+   "warnings": [
+    "This file holds 2 separate tables. Say which one you want, or ask me to describe them."
+   ]
+  }
+ ]
+}

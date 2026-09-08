@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "landmark-mcp",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-01",
+
+  // Workers run V8 isolates, so there is no cold start to pay on the request path.
+  // That matters more than usual here: judging happens weeks after the last commit,
+  // and a free tier that sleeps would answer the first judge with a timeout.
+  "observability": { "enabled": true },
+
+  // Bookmarks are the one piece of state that must survive an isolate being recycled.
+  // Uncomment and fill in the id after `wrangler kv namespace create LANDMARK_KV`.
+  // "kv_namespaces": [{ "binding": "LANDMARK_KV", "id": "<id>" }]
+
+  "vars": {}
+}
