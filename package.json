@@ -7,14 +7,20 @@
   "engines": {
     "node": ">=20.11"
   },
-  "main": "./dist/index.js",
+  "main": "./dist/src/server.js",
+  "types": "./dist/src/server.d.ts",
   "bin": {
-    "landmark-mcp": "./dist/index.js"
+    "landmark-mcp": "./dist/src/local.js"
   },
+  "files": [
+    "dist",
+    "web",
+    "data/index.json"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "node --watch --experimental-strip-types src/index.ts",
-    "start": "node dist/index.js",
+    "dev": "node --watch --experimental-strip-types src/local.ts",
+    "start": "node dist/src/local.js",
     "test": "node --test --experimental-strip-types test/**/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "demo": "node --experimental-strip-types examples/spoken-demo.ts",

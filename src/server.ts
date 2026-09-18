@@ -132,6 +132,10 @@ export function createHandler(options: HandlerOptions): (request: Request) => Pr
             (n, t) => n + t.regions.reduce((m, r) => m + r.rowCount, 0),
             0,
           ),
+          // Whether a saved place will still be there tomorrow. Without a KV binding
+          // the server still works, but bookmarks last only as long as this isolate —
+          // a downgrade worth seeing here rather than discovering when one is gone.
+          bookmarks: options.makeStore ? 'persistent' : 'this instance only',
         }),
         { headers: JSON_HEADERS },
       );

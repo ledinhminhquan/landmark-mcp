@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Local runner. Serves the same Web-standard handler the Worker will, behind a small
  * node:http adapter, so what is tested locally is the deployed code path rather than
@@ -5,18 +6,57 @@
  *
  *   npm run serve            # reads data/index.json
  *   npm run serve -- 8788    # on another port
+ *
+ * This file is also the package's `bin`, so it cannot assume the working directory is
+ * the checkout: the index and the web client are located relative to the package root,
+ * which is found by walking up from this module until a package.json appears.
  */
 
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
-import { extname, join, normalize } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { dirname, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 
 import { createHandler } from './server.ts';
 import { assertIndex } from './indexfmt.ts';
 
 const port = Number(process.argv[2] ?? process.env['PORT'] ?? 8787);
-const indexPath = process.env['LANDMARK_INDEX'] ?? 'data/index.json';
+
+/** Nearest ancestor of this module holding a package.json; the checkout when run from source. */
+async function packageRoot(): Promise<string> {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let up = 0; up < 5; up++) {
+    try {
+      await stat(join(dir, 'package.json'));
+      return dir;
+    } catch {
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+  return process.cwd();
+}
+
+const root = await packageRoot();
+
+/** An explicit path wins; otherwise prefer the working directory, then the package's own copy. */
+async function locateIndex(): Promise<string> {
+  const explicit = process.env['LANDMARK_INDEX'];
+  if (explicit) return isAbsolute(explicit) ? explicit : resolve(explicit);
+  for (const candidate of [resolve('data/index.json'), join(root, 'data', 'index.json')]) {
+    try {
+      await stat(candidate);
+      return candidate;
+    } catch {
+      /* try the next one */
+    }
+  }
+  return resolve('data/index.json');
+}
+
+const indexPath = await locateIndex();
 
 let parsed: unknown;
 try {
@@ -83,10 +123,12 @@ async function tryStatic(req: IncomingMessage, res: ServerResponse): Promise<boo
   const path = new URL(req.url ?? '/', 'http://localhost').pathname;
   if (path === '/mcp' || path === '/health') return false;
 
-  const rel = path === '/' ? 'index.html' : path.replace(/^\/+/, '');
-  const root = normalize('web');
-  const file = normalize(join(root, rel));
-  if (!file.startsWith(root)) {
+  const rel = path === '/' ? 'index.html' : decodeURIComponent(path).replace(/^\/+/, '');
+  const webRoot = resolve(root, 'web');
+  const file = normalize(join(webRoot, rel));
+  // Compare against the directory *with* a separator: a bare prefix test would also
+  // accept a sibling whose name merely starts with "web".
+  if (file !== webRoot && !file.startsWith(webRoot + sep)) {
     res.statusCode = 403;
     res.end('Forbidden');
     return true;

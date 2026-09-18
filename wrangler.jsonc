@@ -9,9 +9,33 @@
   // and a free tier that sleeps would answer the first judge with a timeout.
   "observability": { "enabled": true },
 
+  // The voice client is served from the same origin as the MCP endpoint.
+  //
+  // Without this block a deployed Worker answered GET / with JSON, so anyone opening
+  // the deployment URL got a protocol error instead of the microphone button — the
+  // demo existed only on the machine it was built on. Same-origin also keeps the
+  // browser's Origin check meaningful and avoids a CORS preflight on every tool call.
+  //
+  // `run_worker_first` pins the two dynamic routes: /mcp and /health must reach the
+  // Worker even if a file of that name is ever added to web/. Everything else is
+  // served from web/ when it matches a file and falls through to the Worker when it
+  // does not, which is what produces the 404 that server.ts writes.
+  "assets": {
+    "directory": "./web",
+    "not_found_handling": "none",
+    "run_worker_first": ["/mcp", "/health"]
+  },
+
   // Bookmarks are the one piece of state that must survive an isolate being recycled.
-  // Uncomment and fill in the id after `wrangler kv namespace create LANDMARK_KV`.
-  // "kv_namespaces": [{ "binding": "LANDMARK_KV", "id": "<id>" }]
+  // Without this binding the server still runs — it falls back to per-isolate memory,
+  // and GET /health reports "persistence": "memory" so the downgrade is visible rather
+  // than discovered when a saved place is gone. To turn persistence on:
+  //
+  //   npx wrangler kv namespace create LANDMARK_KV
+  //
+  // then paste the printed id below and uncomment. It is left commented because a
+  // placeholder id makes `wrangler deploy` fail outright, which is worse than memory.
+  // "kv_namespaces": [{ "binding": "LANDMARK_KV", "id": "<id from the command above>" }],
 
   "vars": {}
 }
