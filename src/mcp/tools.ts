@@ -1,7 +1,7 @@
 /**
  * The tool surface.
  *
- * Eight tools, not eighteen. There is no `get_cell`, no `get_row`, no `get_column` —
+ * Nine tools, not nineteen. There is no `get_cell`, no `get_row`, no `get_column` —
  * those would rebuild the cell-by-cell maze in tool form and hand the traversal
  * problem to the model instead of solving it.
  *

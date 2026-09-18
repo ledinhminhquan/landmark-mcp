@@ -27,7 +27,7 @@ Two questions had to be answered before committing, and both are settled.
 
 What is empty, and was verified by direct paged queries against `registry.modelcontextprotocol.io` on 2026-09-08: the registry's ~7 accessibility servers are **all** axe-core/WCAG/VPAT auditing tools built for sighted developers (mcp-agent-accessibility-auditor, accessibility-scanner-mcp, accessibility-ai-mcp, mcp-accessibility-scanner, wcag-accessibility, accessibility-ai, WCAG-Compliance/mcp). Zero overlap with the tabular servers. `screen reader` and `sonification` return zero servers. GitHub returns 0 for `mcp spreadsheet accessibility`, 0 for `mcp screen reader accessibility assistive`, 0 for `voice spreadsheet blind`.
 
-**The one true, checkable, reproducible claim:** as of 2026-09-08 the official MCP registry contains no assistive MCP server whose consumer is a disabled end user rather than a developer. State the query so a judge can reproduce it. Never claim a "first" beyond that.
+**The claim, corrected 2026-09-18.** An earlier version of this spec said the official MCP registry contains no assistive MCP server whose consumer is a disabled end user. That is false. **NeuroDock** publishes several end-user assistive servers for cognitive and executive-function support. Worse, the method could not have supported the claim either way: the registry's `search` matches substrings of server *names* only — not descriptions, not audiences — so an empty result for "assistive" is evidence of nothing. What survives is narrower and still worth saying: we know of no MCP server that lets a blind user interrogate their own spreadsheet by voice. Say that as an observation of what we could find, never as a "first".
 
 **Best alternative if you kill it:** none is better. The nearest pivots (a WCAG audit MCP server; a generic spreadsheet MCP server) are the two most crowded categories in the registry. Build this.
 
@@ -76,7 +76,7 @@ Supporting, all verified twice:
 
 ## 3. MCP tool surface
 
-Eight tools, one `table_` prefix, consistent throughout. Design rules applied, each traceable:
+Nine tools, one `table_` prefix, consistent throughout. (`table_structure` was added during the build, so a listener can hear how a table is being read and correct it aloud.) Design rules applied, each traceable:
 
 - Anthropic's tool guidance: "Fewer, more thoughtful tools outperform comprehensive tool libraries" and "Rather than a `list_contacts` tool that returns everything, implement `search_contacts` with filtering." No `get_cell` / `get_row` / `get_column` — that would rebuild the screen-reader maze in tool form.
 - Alexa+ Functional Requirement 9, verbatim: "Present a maximum of 5 options with key differentiators and offer pagination" and "Keep voice responses under 30 seconds. For longer content, offer to 'tell you more' rather than reading everything upfront." This is live Alexa+ certification text, not legacy guidance — cite it as such.
@@ -604,7 +604,7 @@ Screen recording of a real screen reader arrowing across a real workbook: "B7, 4
 **0:35–1:45 — The ask (Design, and THE ACCESSIBILITY MOMENT)**
 Screen dark. Speaker only. Four exchanges, all real, no cuts inside them:
 
-1. *"What's in the regional sales file?"* → `table_describe` speaks the shape in one sentence: rows, columns, what the columns are, where the gaps are. **This is orientation — the thing no screen reader, no Excel feature, and no other MCP server does.**
+1. *"What's in the regional sales file?"* → `table_describe` speaks the shape in one sentence: rows, columns, what the columns are, where the gaps are. **This is orientation — what a screen reader and a cell-by-cell traversal cannot give you.** Do not extend that into a claim about every other MCP server; see the corrected claim above.
 2. *"Which regions were below target in more than half the months?"* → `table_query`. One question. On a 12×40 sheet this costs hundreds of keystrokes to traverse. **This contrast is the pitch.**
 3. **THE MOMENT — 0:58 to 1:20.** *"How do you know?"* → `table_explain`: "That came from cells F14, F27 and F31 on the Sales sheet. Each one is 2026, Q3, EMEA, Revenue. Two rows were excluded because their target cells were blank." On screen, a slow zoom into the workbook showing a stacked, merged header block — `2026 | 2026` over `Q3 | Q4` — with the caption: *the file declares none of this; the server infers it.* Narration, eight seconds: "CHI 2026 studied twelve blind spreadsheet users. None of them fully trusted an AI answer they could not verify. So every answer here carries the cells it came from, and the header path for each one." **This is the beat that proves accessibility value, and it is the only beat you must not cut.**
 4. *"Save my place, I'll come back to this."* → `table_bookmark`. Hard cut. Caption: **next day.** *"Where was I?"* → `table_resume` restates the table, the filter and the last answer.
@@ -616,7 +616,7 @@ Ten seconds of `table_compare` orchestrating across two sheets. Ten seconds of t
 Fast cuts, no narration beyond a single sentence: the wire-contract test suite going green; a terminal showing the 2025-11-25 handshake frames; the p95 latency assertion under 500 ms against Amazon's published budget; the boot assertion line `spec 2025-11-25 · Streamable HTTP`; a diagram of ingest → index → planner → spoken summary with the header-path resolver highlighted. One sentence: "Self-hosted MCP server, spec 2025-11-25, Streamable HTTP, stateless JSON, two runtime dependencies, every number computed in TypeScript — never by a language model."
 
 **2:45–3:00 — The claim (Potential Impact)**
-"As of today the official MCP registry has no assistive server whose user is a disabled person — every accessibility server in it is an auditing tool for sighted developers. Here is the query. WHO counts at least 2.2 billion people with a near or distance vision impairment." Repo URL and live endpoint on screen.
+"We could not find an MCP server that lets a blind person interrogate their own spreadsheet by voice. WHO counts at least 2.2 billion people with a near or distance vision impairment." Repo URL and live endpoint on screen. **Do not say the registry has no assistive server** — it does, and the registry search would not have settled the question anyway. A claim a judge can falsify in one query costs more than it buys.
 
 **If you can get a blind or low-vision user to try it and give you ten seconds of reaction, put that at 2:45 instead and move the claim to the description.** It is the highest-leverage hour available to you across two of the four criteria. Reach out in week 1, not week 5 — r/Blind, the NVDA users group at nvda.groups.io, AppleVis, AFB and NFB communities, or the Vietnam Blind Association. Credit them by name in the README and the video. A solo sighted developer shipping a BLV product with zero BLV input is the failure mode this community recognises instantly.
 
@@ -639,7 +639,7 @@ Today is 2026-09-08. Hard deadline 2026-10-23 12:00 PT = 2026-10-24 02:00 GMT+7.
 - **Milestone: `npm run ingest` produces a correct header path for every cell in all five fixtures.** If this slips past Sep 21, cut `table_compare` from scope immediately.
 
 **Week 3 · Sep 22–28 — Tools and query planning**
-- All eight tools registered with final names, schemas and description strings. Query planner, executor, exclusion accounting, `answer_id` store, cursor minting.
+- All nine tools registered with final names, schemas and description strings. Query planner, executor, exclusion accounting, `answer_id` store, cursor minting.
 - Spoken-summary formatter with the 30-word ceiling and number formatting by inferred type.
 - Every error path returning the two-line `isError` format.
 - KV-backed bookmark store; `table_bookmark` / `table_resume` working across a server restart.

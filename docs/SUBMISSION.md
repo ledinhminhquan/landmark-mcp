@@ -83,12 +83,15 @@ numbers scaled for listening and identifiers stripped before anything reaches a 
 A voice product whose brevity depends on the model remembering to be brief is a chatbot
 that happens to be read aloud.
 
-**The split is forced by the platform and useful anyway.** ExcelJS needs Node streams
-and Buffer, which Cloudflare Workers do not have. So ingest runs offline in Node and
-emits versioned JSON; the Worker does pure computation over it. A grouped aggregate over
-2,000 rows measures **p95 4.2 ms** against a 500 ms voice budget, with no cold start.
+**The split is deliberate, not forced.** ExcelJS wants Node streams and Buffer, which
+Workers provide only behind the `nodejs_compat` flag — possible, but not free, and a
+spreadsheet does not change between deploys, so parsing on the request path is work
+repaid never. Ingest runs offline in Node and emits versioned JSON; the Worker does pure
+computation over it. A grouped aggregate over 2,000 rows is asserted to stay inside the
+500 ms voice budget and measures in single to low double-digit milliseconds on a laptop,
+with no cold start.
 
-**Eight tools, not eighteen.** There is no `get_cell`, `get_row` or `get_column` —
+**Nine tools, not nineteen.** There is no `get_cell`, `get_row` or `get_column` —
 those would rebuild the cell-by-cell maze in tool form and hand the traversal problem
 back to the model.
 
@@ -104,11 +107,15 @@ Sixty-two tests, typecheck clean under `strict` with `noUncheckedIndexedAccess`.
 protocol revision is asserted, so a dependency bump cannot silently change it. Every
 example in the README is verbatim output from a real call.
 
-And a specific, reproducible claim rather than a grand one: as of 2026-09-08 the
-official MCP registry's accessibility servers are **all** axe/WCAG auditing tools built
-for sighted developers. Query `registry.modelcontextprotocol.io` for `accessibility` and
-read the descriptions. There is no assistive MCP server whose consumer is a disabled end
-user. That is the gap this fills.
+And a narrow claim rather than a grand one. We know of no MCP server that lets a
+blind user interrogate their own spreadsheet by voice. That is an observation about
+what we could find, not a claim of being first — the official registry does contain
+end-user assistive servers, notably **NeuroDock**'s set for cognitive and
+executive-function support, and the registry's `search` matches substrings of server
+*names* only, so an empty result for "assistive" proves nothing either way. An earlier
+draft asserted that no assistive MCP server had a disabled end user as its consumer.
+That was false, and false in the flattering direction. The gap this fills is the
+specific one: spreadsheets, by voice, for someone who cannot see the grid.
 
 ## What I learned
 
@@ -137,9 +144,14 @@ HTTP against the deployed endpoint. It stands in for device access. It is not a
 simulation of the server.
 
 **Verify it yourself:**
-- Live endpoint: `[YOUR WORKERS URL]/health` — reports the negotiated protocol revision
-- `git clone && npm install && npm test` — 62 tests
-- `npm run serve` then open `http://localhost:8787/`
+- `git clone && npm install && npm test` — 100 tests
+- `npm run ingest -- test/fixtures/*.xlsx test/fixtures/*.csv && npm start`, then open
+  `http://localhost:8787/` for the voice client and `/health` for the negotiated
+  protocol revision
+- Not yet deployed to a public URL: publishing needs a Cloudflare account, which is the
+  owner's to create. `wrangler deploy` is configured and passes `--dry-run`; the live
+  endpoint goes here once it exists rather than standing as a placeholder that looks
+  like an oversight.
 
 ---
 

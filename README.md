@@ -98,10 +98,16 @@ The intersection is unoccupied; none of the neighbourhoods are.
 | **VoxLens** (CHI 2022) and **VERSE** (ASSETS 2019) did voice and sonified access to data for screen-reader users years ago | Both require the data's *publisher* to instrument the content. An MCP server inverts that: the user brings their own file and needs nobody's cooperation. |
 | **Copilot in Excel** works with a screen reader today | It documents a prerequisite of AutoSave and OneDrive. It does not help with a CSV someone emailed you, and it returns a chat pane you must then navigate. |
 
-The one checkable claim, and reproducible by anyone: as of 2026-09-08 the official MCP
-registry's accessibility servers are **all** axe/WCAG auditing tools built for sighted
-developers. Query `registry.modelcontextprotocol.io` for `accessibility` and read the
-descriptions. There is no assistive MCP server whose consumer is a disabled end user.
+The honest version of the market claim. We know of no MCP server that lets a blind
+user interrogate their own spreadsheet by voice, and that is the gap this fills — but
+it is an observation, not a claim of being first. Two things cut against a stronger
+version. The official registry does contain end-user assistive servers: **NeuroDock**
+publishes several for cognitive and executive-function support, aimed at
+neurodivergent users rather than at developers. And the registry's `search` matches
+substrings of *server names* only, not descriptions or audiences, so a query returning
+nothing for "assistive" is evidence of nothing. An earlier draft of this README said
+the registry contained no assistive server whose consumer is a disabled end user. That
+was wrong, and it was wrong in the direction that flattered us.
 
 ## Run it
 
@@ -117,7 +123,7 @@ A demo index ships in `data/index.json`, so `npm run serve` works immediately af
 reports the negotiated protocol revision and the corpus size.
 
 ```bash
-npm test          # 60 tests
+npm test          # 100 tests
 npm run typecheck # strict, noUncheckedIndexedAccess, exactOptionalPropertyTypes
 npm run demo      # prints what the voice agent actually says
 ```
@@ -128,11 +134,13 @@ npm run demo      # prints what the voice agent actually says
 spreadsheet ──[ ingest CLI, Node ]──▶ data/index.json ──[ Worker ]──▶ MCP tools
 ```
 
-The split is forced and useful. ExcelJS needs Node streams and Buffer, which Cloudflare
-Workers do not have. Rather than shim it, everything expensive happens once, offline,
-and the server does pure computation over plain JSON — which is what keeps a grouped
-aggregate over 2,000 rows at **p95 under 5 ms** against a 500 ms budget, with no cold
-start to pay because V8 isolates do not have one.
+The split is deliberate. ExcelJS wants Node streams and Buffer, which Workers provide
+only behind the `nodejs_compat` flag — so it is possible, not free. Since a spreadsheet
+does not change between deploys, parsing it on the request path would be work repaid
+never. Everything expensive happens once, offline, and the server does pure computation
+over plain JSON. A grouped aggregate over 2,000 rows is asserted to stay inside the
+500 ms voice budget and measures in single to low double-digit milliseconds on a
+laptop, with no cold start to pay because V8 isolates do not have one.
 
 | Path | What lives there |
 |---|---|
@@ -140,15 +148,16 @@ start to pay because V8 isolates do not have one.
 | `src/ingest/` | Readers for xlsx/csv/tsv and the index builder — Node only |
 | `src/query/` | Deterministic filtering and aggregation, with exclusion accounting |
 | `src/voice/` | Spoken formatting, word budgets, number scaling |
-| `src/mcp/` | The eight tools and the answer/bookmark store |
+| `src/mcp/` | The nine tools and the answer/bookmark store |
 | `src/server.ts` | Web-standard fetch handler — the same code locally and on Workers |
 
-## The eight tools
+## The nine tools
 
 | Tool | For |
 |---|---|
 | `table_list` | What files are available |
 | `table_describe` | Orientation: shape, columns, types, gaps — call it first |
+| `table_structure` | Say how a table is being read, and correct it out loud when it is wrong |
 | `table_query` | Filter and aggregate; returns a spoken sentence plus provenance |
 | `table_explain` | Read back the exact cells behind a previous answer |
 | `table_read_rows` | Individual rows, five at a time, when a summary will not do |
