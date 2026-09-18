@@ -28,6 +28,43 @@ const ENDPOINT =
 // MCP client
 // ---------------------------------------------------------------------------
 
+/**
+ * Read a JSON-RPC reply out of a Streamable HTTP response body.
+ *
+ * The first version took the first line beginning with "data:" and parsed it. That is
+ * not what an event stream is. A conforming server may send a comment as a keep-alive,
+ * may send notifications or a ping ahead of the reply, and may split one event's data
+ * across several "data:" lines which the reader is required to rejoin with newlines.
+ * Against any of those this client would have thrown, or — worse — answered the
+ * question using a notification it mistook for the result.
+ *
+ * Events are separated by a blank line; within an event, one leading space after the
+ * colon is part of the syntax rather than the data. The reply we want is the one
+ * carrying our own request id; falling back to the first message with a result or an
+ * error keeps a server that omits the id working rather than failing the call.
+ */
+function readEventStream(text, id) {
+  const messages = [];
+  for (const block of text.split(/\r?\n\r?\n/)) {
+    const data = block
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).replace(/^ /, ''))
+      .join('\n');
+    if (!data) continue;
+    try {
+      messages.push(JSON.parse(data));
+    } catch {
+      // A keep-alive comment or a partial frame. Not ours to interpret.
+    }
+  }
+  return (
+    messages.find((m) => m && m.id === id) ??
+    messages.find((m) => m && (m.result !== undefined || m.error !== undefined)) ??
+    null
+  );
+}
+
 class McpClient {
   #id = 0;
   #initialized = false;
@@ -35,6 +72,7 @@ class McpClient {
   tools = [];
 
   async #rpc(method, params) {
+    const id = ++this.#id;
     const started = performance.now();
     const res = await fetch(ENDPOINT, {
       method: 'POST',
@@ -43,7 +81,7 @@ class McpClient {
         accept: 'application/json, text/event-stream',
         ...(this.#initialized ? { 'mcp-protocol-version': PROTOCOL_VERSION } : {}),
       },
-      body: JSON.stringify({ jsonrpc: '2.0', id: ++this.#id, method, params }),
+      body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
     });
     this.lastLatencyMs = Math.round(performance.now() - started);
 
@@ -51,15 +89,16 @@ class McpClient {
 
     const text = await res.text();
     const type = res.headers.get('content-type') ?? '';
+    // Streamable HTTP lets the server answer a POST with either JSON or an event
+    // stream, and the choice is the server's. A client that handles only one of them
+    // works until the day the deployment is configured the other way.
     let body;
     if (type.includes('application/json')) {
       body = JSON.parse(text);
     } else {
-      // Streamable HTTP may answer as a single SSE frame; accept both shapes.
-      const frame = text.split('\n').map((l) => l.trim()).find((l) => l.startsWith('data:'));
-      if (!frame) throw new Error('The table service sent an empty reply.');
-      body = JSON.parse(frame.slice(5).trim());
+      body = readEventStream(text, id);
     }
+    if (!body) throw new Error('The table service sent an empty reply.');
     if (body.error) throw new Error(body.error.message ?? 'The table service refused that.');
     return body.result;
   }
@@ -492,4 +531,4 @@ function absorb(tool, args, payload) {
   }
 }
 
-export { McpClient, Voice, route, absorb, loadCatalogue, context };
+export { McpClient, Voice, readEventStream, route, absorb, loadCatalogue, context };

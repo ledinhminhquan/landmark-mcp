@@ -239,10 +239,19 @@ test('table_explain advertises a UI resource, and the resource is servable', asy
   const list = await readRpc(await post({ jsonrpc: '2.0', id: 20, method: 'tools/list' }));
   const tools = (list['result'] as { tools: { name: string; _meta?: Record<string, unknown> }[] }).tools;
   const explain = tools.find((t) => t.name === 'table_explain');
+  // Both keys, because there are two and hosts are told to check either. The nested
+  // `_meta.ui.resourceUri` is the current shape; the flat `ui/resourceUri` is the
+  // deprecated one older hosts still read. This server sent only the deprecated key,
+  // so a host following current guidance found no UI at all.
+  assert.equal(
+    (explain?._meta?.['ui'] as { resourceUri?: string } | undefined)?.resourceUri,
+    'ui://landmark/explain',
+    'the current nested key is missing',
+  );
   assert.equal(
     explain?._meta?.['ui/resourceUri'],
     'ui://landmark/explain',
-    'the flat slash key is the contract, not a nested _meta.ui.resourceUri',
+    'the deprecated flat key is missing, and older hosts read only that one',
   );
 
   const res = await readRpc(
@@ -273,4 +282,73 @@ test('explain ships the surrounding grid so a highlight has neighbours', async (
     assert.ok(addresses.includes(cell), `highlighted ${cell} is not in the grid it must line up with`);
   }
   assert.equal(e['title'], 'FY2026 Departmental Budget');
+});
+
+// ── the browser client's half of the transport ──────────────────────────────
+
+test('the browser client reads an event stream rather than its first line', async () => {
+  // @ts-expect-error - the voice client is plain JavaScript, deliberately not compiled.
+  const { readEventStream } = await import('../web/app.js');
+
+  const reply = { jsonrpc: '2.0', id: 3, result: { ok: true } };
+
+  // One event, the ordinary case.
+  assert.deepEqual(
+    readEventStream(`event: message\ndata: ${JSON.stringify(reply)}\n\n`, 3),
+    reply,
+  );
+
+  // A keep-alive comment and a notification ahead of the reply. The first version
+  // took the first "data:" line it saw, so this answered the user's question with a
+  // log notification and called it a result.
+  const noisy =
+    ': keep-alive\n\n' +
+    'event: message\ndata: {"jsonrpc":"2.0","method":"notifications/message","params":{}}\n\n' +
+    `event: message\ndata: ${JSON.stringify(reply)}\n\n`;
+  assert.deepEqual(readEventStream(noisy, 3), reply);
+
+  // One event whose data is split across lines, which the reader must rejoin with
+  // newlines before parsing. The first version parsed line one and threw.
+  const split = 'event: message\ndata: {"jsonrpc":"2.0","id":3,\ndata: "result":{"ok":true}}\n\n';
+  assert.deepEqual(readEventStream(split, 3), reply);
+
+  // Event streams are specified with CRLF.
+  assert.deepEqual(
+    readEventStream(`event: message\r\ndata: ${JSON.stringify(reply)}\r\n\r\n`, 3),
+    reply,
+  );
+
+  // Nothing usable is null, not a throw from JSON.parse and not a wrong answer.
+  assert.equal(readEventStream(': nothing here\n\n', 3), null);
+});
+
+test('the widget document survives being built from a template literal', async () => {
+  // The widget is emitted from a TypeScript template literal, which eats a single
+  // backslash before it ever reaches a browser. A date regex written the obvious way
+  // shipped as /^d{4}-d{2}-d{2}T/ — syntactically valid, and silently never matching,
+  // so every date rendered as a raw ISO timestamp and nothing anywhere failed.
+  const res = await readRpc(
+    await post({ jsonrpc: '2.0', id: 30, method: 'resources/read', params: { uri: 'ui://landmark/explain' } }),
+  );
+  const html = (res['result'] as { contents: { text: string }[] }).contents[0]!.text;
+
+  assert.ok(
+    html.includes('/^\\d{4}-\\d{2}-\\d{2}T/'),
+    'the date regex lost its escapes on the way through the template literal',
+  );
+
+  // Prove it rather than trust the string: pull the function out and run it.
+  const source = html.match(/function show\(value\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(source, 'show() not found in the widget document');
+  const show = new Function(`return (${source.replace('function show', 'function')})`)() as (
+    v: unknown,
+  ) => string;
+  assert.equal(show('2026-07-04T00:00:00.000Z'), 'Jul 4, 2026');
+  assert.equal(show('North'), 'North');
+  assert.equal(show(null), '');
+
+  // And the handshake a host waits for before it sends anything.
+  assert.match(html, /ui\/initialize/);
+  assert.match(html, /ui\/notifications\/initialized/);
+  assert.match(html, /ui\/notifications\/tool-result/);
 });

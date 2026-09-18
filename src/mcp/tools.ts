@@ -41,7 +41,7 @@ import {
 } from '../voice/speak.ts';
 import type { Store } from './store.ts';
 import { materialise } from '../table/materialise.ts';
-import { EXPLAIN_UI_URI, UI_RESOURCE_KEY } from './widget.ts';
+import { EXPLAIN_UI_URI, uiMeta } from './widget.ts';
 
 const PAGE = 5;
 
@@ -581,7 +581,7 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
       // a person with residual sight, or a sighted colleague reading along, can see
       // the counted cells lit up instead of taking the sentence on faith. Hosts that
       // do not understand MCP Apps ignore this key and lose nothing.
-      _meta: { [UI_RESOURCE_KEY]: EXPLAIN_UI_URI },
+      _meta: uiMeta(EXPLAIN_UI_URI),
       title: 'Show where an answer came from',
       description:
         'Show exactly where a previous answer came from. Pass the answer identifier you were given ' +

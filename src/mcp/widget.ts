@@ -27,8 +27,23 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { LandmarkIndex } from '../indexfmt.ts';
 
-/** The `_meta` key a host reads to find a tool's UI. Flat, with a slash. */
+/**
+ * The `_meta` key a host reads to find a tool's UI.
+ *
+ * There are two, and a tool has to declare both. `_meta.ui.resourceUri` is the current
+ * shape; the flat `ui/resourceUri` is the deprecated one that older hosts still read.
+ * The extension package's own documentation says hosts must check both, which is only
+ * useful advice if servers send both — this one sent the deprecated key alone.
+ */
 export const UI_RESOURCE_KEY = 'ui/resourceUri';
+
+/** The UI extension revision this widget speaks, distinct from the MCP revision. */
+export const UI_PROTOCOL_VERSION = '2026-01-26';
+
+/** Everything a tool must put in `_meta` for a host to find and render this widget. */
+export function uiMeta(uri: string): Record<string, unknown> {
+  return { ui: { resourceUri: uri }, [UI_RESOURCE_KEY]: uri };
+}
 /** MIME type that marks a resource as an MCP App rather than plain HTML. */
 export const UI_MIME = 'text/html;profile=mcp-app';
 export const EXPLAIN_UI_URI = 'ui://landmark/explain';
@@ -83,6 +98,28 @@ function widgetHtml(): string {
 <script>
 // The host posts the tool result in; render whatever arrives, and stay useful if
 // nothing does. No network calls — everything shown is already in the message.
+/**
+ * A cell as a person should see it.
+ *
+ * Dates arrive as ISO strings because that is what survives JSON. Printed raw, a
+ * column of "2026-07-04T00:00:00.000Z" is exactly the machine noise a screen reader
+ * user is being spared — and the colleague reading along over their shoulder is the
+ * whole reason this panel exists.
+ */
+function show(value) {
+  if (value === null || value === undefined) return '';
+  // Doubled on purpose: this document is built from a template literal, so a single
+  // backslash is eaten before it ever reaches the browser and the test never matches.
+  if (typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}T/.test(value)) {
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+  }
+  if (typeof value === 'number') return value.toLocaleString();
+  return String(value);
+}
+
 function render(data) {
   const said = document.getElementById('said');
   const wrap = document.getElementById('wrap');
@@ -127,7 +164,7 @@ function render(data) {
     tr.append(rh);
     row.cells.forEach((cell) => {
       const td = document.createElement('td');
-      td.textContent = cell.value === null ? '' : String(cell.value);
+      td.textContent = show(cell.value);
       if (hi.has(cell.address)) {
         td.className = 'hi';
         // Colour alone is not a signal a screen reader can convey.
@@ -154,11 +191,80 @@ function render(data) {
   note.textContent = bits.join(' · ');
 }
 
+/*
+ * The host handshake.
+ *
+ * This document used to listen for a message and render whatever arrived. That is not
+ * the protocol, and it fails in both directions: a host that waits to be told the app
+ * is ready waits forever, and a host that sends the tool result before this script
+ * runs finds nobody listening. Neither shows up in a screenshot of a working demo,
+ * because the demo was driving the widget by hand.
+ *
+ * The sequence is: post ui/initialize, wait for the result, post
+ * ui/notifications/initialized, then receive ui/notifications/tool-result. Method
+ * names and parameter shapes are taken from the ext-apps package's own generated
+ * schema. The sandboxed frame has an opaque origin, so "*" is the target the
+ * reference implementation uses too.
+ */
+const UI_PROTOCOL = '${UI_PROTOCOL_VERSION}';
+const host = window.parent;
+let nextId = 1;
+let initialized = false;
+
+function post(message) {
+  if (host && host !== window) host.postMessage(message, '*');
+}
+
+function notify(method, params) {
+  post({ jsonrpc: '2.0', method: method, params: params || {} });
+}
+
+/** Tell the host how tall we are, so the frame is not a scrollbar around a table. */
+function reportSize() {
+  const el = document.documentElement;
+  notify('ui/notifications/size-changed', {
+    width: Math.ceil(el.scrollWidth),
+    height: Math.ceil(el.scrollHeight),
+  });
+}
+
+const initializeId = nextId++;
+
 window.addEventListener('message', (e) => {
   const msg = e.data;
   if (!msg || typeof msg !== 'object') return;
-  // Hosts differ in envelope; accept the payload wherever it is hung.
-  render(msg.params?.data ?? msg.data ?? msg.result?.structuredContent ?? msg);
+
+  // The answer to our own ui/initialize.
+  if (msg.id === initializeId && !initialized) {
+    initialized = true;
+    notify('ui/notifications/initialized', {});
+    reportSize();
+    return;
+  }
+
+  if (msg.method === 'ui/notifications/tool-result') {
+    render(msg.params?.structuredContent ?? msg.params?.data ?? null);
+    reportSize();
+    return;
+  }
+
+  // Hosts that predate the handshake just post the payload. Keep rendering it rather
+  // than showing an empty frame to someone whose host is a version behind.
+  if (msg.method === undefined && msg.id === undefined) {
+    render(msg.params?.data ?? msg.data ?? msg.result?.structuredContent ?? msg);
+    reportSize();
+  }
+});
+
+post({
+  jsonrpc: '2.0',
+  id: initializeId,
+  method: 'ui/initialize',
+  params: {
+    protocolVersion: UI_PROTOCOL,
+    appInfo: { name: 'landmark-explain', version: '0.1.0' },
+    appCapabilities: {},
+  },
 });
 
 render(null);
