@@ -15,6 +15,7 @@
  * asking for a total wants "about 4.2 million" and can ask for the exact figure.
  */
 
+import { asNumber } from '../table/infer.ts';
 import type { IndexColumn, IndexRegion } from '../indexfmt.ts';
 import type { ExcludedCell, GroupResult, QueryResult } from '../query/engine.ts';
 
@@ -84,10 +85,25 @@ export function exactNumber(n: number): string {
   return Number.isInteger(n) ? n.toLocaleString('en-US') : n.toFixed(2);
 }
 
+/** Kinds whose values are numbers even when the file stored them as text. */
+const NUMERIC_KINDS = new Set(['number', 'currency', 'percent']);
+
 export function speakCell(v: string | number | boolean | null, kind = 'text'): string {
   if (v === null || (typeof v === 'string' && v.trim() === '')) return 'empty';
   if (typeof v === 'boolean') return v ? 'yes' : 'no';
   if (typeof v === 'number') return speakNumber(v, kind);
+
+  // A CSV carries no types: every cell arrives as text, so a population column that
+  // inference correctly typed as numbers still holds the string "100352192". Read as
+  // text that is nine digits spoken one after another — exactly the experience this
+  // tool exists to replace. Parsed with the same reader that decided the column was
+  // numeric, so what is spoken and what is counted cannot disagree. The stored cell
+  // keeps the file's own text; only the reading changes.
+  if (NUMERIC_KINDS.has(kind)) {
+    const n = asNumber(v);
+    if (n !== null) return speakNumber(n, kind);
+  }
+
   if (kind === 'date') {
     const d = new Date(v);
     if (!Number.isNaN(d.getTime())) {
@@ -95,6 +111,18 @@ export function speakCell(v: string | number | boolean | null, kind = 'text'): s
     }
   }
   return String(v);
+}
+
+/**
+ * A column's name as it should be heard.
+ *
+ * Names are stored as their header path joined with commas — "2026, Q2, Revenue" —
+ * which is unambiguous on screen and unusable aloud: listing four such columns
+ * produces twelve comma pauses and no way to hear where one column ends and the next
+ * begins. Spoken, the path runs together as the phrase a person would say.
+ */
+export function speakName(name: string): string {
+  return name.replace(/,\s*/g, ' ');
 }
 
 /** "a, b and c" — spoken lists use "and", not a trailing comma. */
@@ -121,7 +149,7 @@ export function speakDescribe(region: IndexRegion, full: boolean): string {
     parts.push('I am treating every row as data, with no headings.');
   } else {
     const named = region.columns.filter((c) => c.path.length > 0);
-    parts.push(`The columns are ${speakList(named.map((c) => c.spoken))}.`);
+    parts.push(`The columns are ${speakList(named.map((c) => speakName(c.spoken)))}.`);
     if (region.headerRows.length > 1) {
       parts.push(`They sit under ${plural(region.headerRows.length, 'level')} of headings.`);
     }
@@ -131,12 +159,12 @@ export function speakDescribe(region: IndexRegion, full: boolean): string {
     const numeric = region.columns.filter((c) => c.sum !== undefined);
     for (const c of numeric.slice(0, 3)) {
       parts.push(
-        `${c.spoken} runs from ${speakNumber(c.min!, c.kind)} to ${speakNumber(c.max!, c.kind)}.`,
+        `${speakName(c.spoken)} runs from ${speakNumber(c.min!, c.kind)} to ${speakNumber(c.max!, c.kind)}.`,
       );
     }
     const gaps = region.columns.filter((c) => c.empty > 0);
     if (gaps.length) {
-      parts.push(`Gaps: ${speakList(gaps.map((c) => `${c.spoken} is missing ${c.empty}`))}.`);
+      parts.push(`Gaps: ${speakList(gaps.map((c) => `${speakName(c.spoken)} is missing ${c.empty}`))}.`);
     }
   }
 
@@ -211,14 +239,14 @@ export function speakQuery(
   if (agg !== 'none') {
     if (q.result === null) {
       return capWords(
-        `Nothing to ${agg === 'avg' ? 'average' : agg}. No matching row held a number in ${target?.spoken ?? 'that column'}.`,
+        `Nothing to ${agg === 'avg' ? 'average' : agg}. No matching row held a number in ${target ? speakName(target.spoken) : 'that column'}.`,
         HEADLINE_WORD_LIMIT,
       );
     }
     const verb =
       agg === 'sum' ? 'the total of' : agg === 'avg' ? 'the average of' : `the ${agg} of`;
     const counted = q.provenance.cellCount;
-    const base = `${speakNumber(q.result, target?.kind)}. That is ${verb} ${target?.spoken ?? 'that column'} across ${plural(counted, 'row')}.`;
+    const base = `${speakNumber(q.result, target?.kind)}. That is ${verb} ${target ? speakName(target.spoken) : 'that column'} across ${plural(counted, 'row')}.`;
     return capWords(base + excludedPhrase(q.provenance.excluded), SPOKEN_WORD_LIMIT);
   }
 
@@ -262,7 +290,7 @@ export function speakExplain(parts: readonly ExplainPart[]): string {
         ? `${p.cells[0]} through ${p.cells[p.cells.length - 1]}`
         : (p.cells[0] ?? 'one cell');
     const lead = named ? `${p.label} came from ${range} on ${p.sheet}` : `That came from ${range} on ${p.sheet}`;
-    const what = !named && p.path.length ? ` Each one is ${p.path.join(', ')}.` : '.';
+    const what = !named && p.path.length ? `. Each one is ${speakName(p.path.join(', '))}.` : '.';
     const skipped = p.excluded.length
       ? ` ${plural(p.excluded.length, 'cell')} did not count: ${speakList(p.excluded.slice(0, 3).map((e) => `${e.address} ${e.reason}`))}.`
       : '';

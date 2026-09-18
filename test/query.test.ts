@@ -8,8 +8,11 @@ import { buildTable } from '../src/ingest/build.ts';
 import { QueryError, resolveColumn, rowLabel, runQuery } from '../src/query/engine.ts';
 import {
   capWords,
+  speakCell,
   speakDescribe,
   speakError,
+  speakExplain,
+  speakName,
   speakNumber,
   speakQuery,
   wordCount,
@@ -199,4 +202,51 @@ test('capWords cuts at a sentence boundary rather than mid-clause', () => {
   const cut = capWords(text, 5);
   assert.equal(cut, 'One two three.');
   assert.ok(wordCount(cut) <= 5);
+});
+
+// ── heard, not read ─────────────────────────────────────────────────────────
+//
+// Three defects found by listening to the deployed client rather than by reading
+// its output. Each was invisible in a transcript and obvious in the ear.
+
+test('a numeric column that arrived as text is still spoken as a number', () => {
+  // A CSV has no types. Inference correctly calls this column numbers, but the cell
+  // holds the string "100352192" — read as text that is nine digits in a row, which
+  // is the exact experience this tool exists to replace.
+  assert.equal(speakCell('100352192', 'number'), '100.4 million');
+  assert.equal(speakCell(100352192, 'number'), '100.4 million');
+  assert.equal(speakCell('4347', 'number'), '4347');
+  // Currency reads as a bare number on purpose: SYMBOL.currency is empty because the
+  // unit is ambiguous across the locales these files come from.
+  assert.equal(speakCell('$1,200', 'currency'), '1200');
+
+  // Text columns are left alone: a postcode or an order number is not a quantity.
+  assert.equal(speakCell('100352192', 'text'), '100352192');
+  assert.equal(speakCell('not a number at all', 'number'), 'not a number at all');
+  assert.equal(speakCell('', 'number'), 'empty');
+});
+
+test('a stacked column name does not collide with the commas between columns', async () => {
+  // Stored as an identifier the client sends back verbatim; spoken as a phrase.
+  assert.equal(speakName('2026, Q2, Revenue'), '2026 Q2 Revenue');
+  assert.equal(speakName('Revenue'), 'Revenue');
+
+  const said = speakDescribe(await region('03-merged-header.xlsx'), false);
+  // The comma after each Revenue is the separator between columns and belongs there.
+  // What must be gone are the commas *inside* a name, which sounded identical.
+  assert.ok(
+    !/2026, Q1/.test(said),
+    `a column name still reads as a comma-separated list: ${said}`,
+  );
+  assert.match(said, /2026 Q1 Revenue/);
+});
+
+test('explain puts a full stop between the source and what it was', () => {
+  const said = speakExplain([
+    { label: '', tableId: 't', regionId: 'r', sheet: 'Budget', cells: ['C3', 'C4', 'C5'], cellCount: 3, excluded: [], path: ['Amount'] },
+  ]);
+  // It read "...on Budget Each one is Amount." — one sentence with no join, which a
+  // synthesiser runs together without a pause.
+  assert.ok(!/Budget Each/.test(said), `missing full stop: ${said}`);
+  assert.match(said, /on Budget\. Each one is Amount\./);
 });
