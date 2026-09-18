@@ -1,0 +1,7 @@
+# Keep the repository in LF so diffs are reviewable regardless of who edits and on
+# what platform. Without this a Windows editor rewrites whole files as CRLF and a
+# three-line change arrives as a five-hundred-line diff nobody can review.
+* text=auto eol=lf
+
+# Generated fixtures are binary; never touch their bytes.
+*.xlsx binary
