@@ -278,12 +278,21 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         : 'There are no tables loaded.';
 
       return ok(spoken, {
-        tables: page.map((t) => ({
-          table_id: t.id,
-          title: t.title,
-          sheet_count: new Set(t.regions.map((r) => r.sheet)).size,
-          row_count: t.regions.reduce((n, r) => n + r.rowCount, 0),
-        })),
+        tables: page.map((t) => {
+          const sheets = [...new Set(t.regions.map((r) => r.sheet))];
+          return {
+            table_id: t.id,
+            title: t.title,
+            // People name a spreadsheet by the tab they remember, not by the filename
+            // it was saved under — "the budget one" means the sheet called Budget in a
+            // file called 04-title-and-vmerge. Reporting only a count made that name
+            // unresolvable, so a client had nothing to match and answered about some
+            // other table instead.
+            sheets,
+            sheet_count: sheets.length,
+            row_count: t.regions.reduce((n, r) => n + r.rowCount, 0),
+          };
+        }),
         more_available: more,
         cursor: more ? String(offset + page.length) : null,
       });
@@ -675,16 +684,24 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
           .optional()
           .describe('Which columns to read. Omit to read them all.'),
         start_row: z.number().int().min(1).default(1).describe('One-based row number within the data.'),
+        // This tool told clients to "call it again with the token" and then had nowhere
+        // to put one: the token was silently dropped and start_row from the previous
+        // call was replayed, so "keep going" read the same five rows forever.
+        cursor: z
+          .string()
+          .optional()
+          .describe('Continuation token from a previous call. Takes precedence over start_row.'),
         limit: z.number().int().min(1).max(10).default(PAGE),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ table_id, sheet, columns, start_row, limit }) => {
+    async ({ table_id, sheet, columns, start_row, cursor, limit }) => {
       const found = await located(index, store, table_id, sheet);
       if (isFailure(found)) return found;
       const { region } = found;
 
-      const from = Math.max(0, start_row - 1);
+      const resumeAt = cursor === undefined ? start_row : Number.parseInt(cursor, 10);
+      const from = Math.max(0, (Number.isFinite(resumeAt) ? resumeAt : 1) - 1);
       const slice = region.rows.slice(from, from + limit);
       if (slice.length === 0) {
         return fail(

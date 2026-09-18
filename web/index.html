@@ -149,7 +149,7 @@
 </aside>
 
 <script type="module">
-import { McpClient, Voice, route, absorb, context } from './app.js';
+import { McpClient, Voice, route, absorb, loadCatalogue, context } from './app.js';
 
 const el = (id) => document.getElementById(id);
 const puck = el('puck'), status = el('status'), log = el('log');
@@ -185,6 +185,36 @@ function showLatency(ms) {
   pill.className = `pill ${ms < 200 ? 'good' : ms < 500 ? 'warn' : 'bad'}`;
 }
 
+/**
+ * Speak, and settle when the voice actually stops.
+ *
+ * The scripted demo used to wait a flat 400 ms between lines, which is shorter than
+ * every sentence this server produces: each new line called speak(), speak() cancels
+ * whatever is talking, and the demo cut itself off mid-word from the second line on.
+ * The guard timer is only there so a dropped end event — Chrome does this on long
+ * utterances — stalls the script rather than hanging it forever.
+ */
+function speakAndSettle(text) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const guard = setTimeout(finish, Math.max(5000, text.length * 120));
+    try {
+      voice.speak(text, () => {
+        clearTimeout(guard);
+        finish();
+      });
+    } catch {
+      clearTimeout(guard);
+      finish();
+    }
+  });
+}
+
 /** One turn: route the utterance, call the tool, speak the server's sentence. */
 async function handle(said) {
   addTurn('You', said);
@@ -194,7 +224,7 @@ async function handle(said) {
   if (plan.speak) {
     setState('speaking');
     addTurn('Landmark', plan.speak, 'no call — needed more from you first');
-    voice.speak(plan.speak);
+    await speakAndSettle(plan.speak);
     return;
   }
 
@@ -213,12 +243,12 @@ async function handle(said) {
 
     addTurn('Landmark', spoken, detail);
     setState('speaking');
-    voice.speak(spoken);
+    await speakAndSettle(spoken);
   } catch (err) {
     const message = `Something went wrong reaching the table. ${err.message}`;
     addTurn('Landmark', message, 'transport error');
     setState('speaking');
-    voice.speak('Something went wrong reaching the table. Try again in a moment.');
+    await speakAndSettle('Something went wrong reaching the table. Try again in a moment.');
   }
 }
 
@@ -233,8 +263,10 @@ async function handle(said) {
  */
 window.landmark = {
   ask: handle,
-  async script(lines, gapMs = 400) {
+  async script(lines, gapMs = 250) {
     for (const line of lines) {
+      // handle() now resolves when the answer has finished being spoken, so this gap
+      // is a breath between turns rather than a bet on how long a sentence takes.
       await handle(line);
       await new Promise((r) => setTimeout(r, gapMs));
     }
@@ -291,6 +323,10 @@ document.addEventListener('keydown', (e) => {
     if (!voice.supported) {
       addTurn('Landmark', 'Speech is unavailable in this browser; the buttons still work.', 'Chrome supports Web Speech');
     }
+    // Learn the whole catalogue before the first utterance, so naming a file works
+    // even when it sits past the first spoken page of five.
+    await loadCatalogue((name, args) => client.call(name, args));
+
     // Open on something useful rather than an empty shell.
     await handle('what do I have');
   } catch (err) {

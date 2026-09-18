@@ -19,7 +19,10 @@
  */
 
 const PROTOCOL_VERSION = '2025-11-25';
-const ENDPOINT = new URL('/mcp', location.href).href;
+// Same origin as the page, so the deployed Worker serves both. Guarded so this
+// module can be imported by the routing tests under Node, where there is no page.
+const ENDPOINT =
+  typeof location === 'undefined' ? 'http://localhost:8787/mcp' : new URL('/mcp', location.href).href;
 
 // ---------------------------------------------------------------------------
 // MCP client
@@ -97,7 +100,8 @@ class McpClient {
 // Speech
 // ---------------------------------------------------------------------------
 
-const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+const Recognition =
+  typeof window === 'undefined' ? undefined : (window.SpeechRecognition ?? window.webkitSpeechRecognition);
 
 class Voice {
   #recognition = null;
@@ -106,7 +110,7 @@ class Voice {
   onstate = () => {};
 
   get supported() {
-    return Boolean(Recognition) && 'speechSynthesis' in window;
+    return typeof window !== 'undefined' && Boolean(Recognition) && 'speechSynthesis' in window;
   }
 
   listen() {
@@ -166,7 +170,36 @@ const context = {
   columns: [],
   /** Everything the server said exists, so an utterance can name one. */
   tables: [],
+  /** A question we asked back, waiting on one more word to become answerable. */
+  pending: null,
+  /** Where in the table they actually are, so a bookmark saves the place they reached. */
+  row: null,
+  /** The bookmark this conversation is using, so "carry on" goes somewhere. */
+  bookmarkName: null,
 };
+
+/** Lowercase whole words. Comparing words rather than substrings is the entire point. */
+function words(text) {
+  return String(text).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+/**
+ * Words that carry intent rather than naming anything, stripped before matching a
+ * table. One of the sheets is called "Compare", and "compare target and actual" is a
+ * request to compare two columns of the table already open — not a request to switch
+ * to a different file whose tab happens to share that word.
+ */
+const INTENT_WORDS = new Set(
+  ('compare versus vs read list total sum average mean count more next continue keep going save ' +
+   'bookmark remember resume describe explain group breakdown highest lowest maximum minimum max ' +
+   'min biggest smallest most least').split(' '),
+);
+
+/** Words too generic to identify anything: they appear in half the sentences spoken. */
+const STOP_WORDS = new Set(
+  ('the a an of and to in it is my me that this one file files table tables sheet sheets ' +
+   'spreadsheet about show tell open what whats how do i have for from with').split(' '),
+);
 
 /**
  * Resolve a table named in an utterance.
@@ -175,23 +208,54 @@ const context = {
  * to be current — which reads as the assistant ignoring you, and is worse than an
  * error because nothing announces that it went wrong. Matching is deliberately loose:
  * people say "the budget one", not "04-title-and-vmerge".
+ *
+ * Two things this gets right that the first version did not. It compares whole words,
+ * so "read that back to me flatly" no longer selects the table called "01 flat" on the
+ * strength of a shared syllable. And it matches sheet names as well as titles, because
+ * people name a spreadsheet by the tab they remember: the budget lives in a file whose
+ * own name contains no such word.
  */
 function findTable(text) {
-  const t = text.toLowerCase();
+  const spoken = new Set(words(text).filter((w) => !INTENT_WORDS.has(w)));
   let best = null;
   let bestScore = 0;
   for (const table of context.tables) {
-    const words = `${table.title} ${table.table_id}`
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((w) => w.length > 1);
-    const score = words.filter((w) => t.includes(w)).length;
+    const names = [table.title, table.table_id, ...(table.sheets ?? [])].join(' ');
+    const terms = [...new Set(words(names))].filter((w) => w.length > 1 && !STOP_WORDS.has(w));
+    const score = terms.filter((w) => spoken.has(w)).length;
     if (score > bestScore) {
       bestScore = score;
       best = table;
     }
   }
   return bestScore > 0 ? best : null;
+}
+
+/**
+ * Page through the whole catalogue once, so a table can be named before it has ever
+ * been spoken about.
+ *
+ * table_list returns five at a time on purpose — a spoken sentence naming thirty files
+ * is unusable. But the client needs to *know* all of them to resolve "the countries
+ * one", and with six fixtures the sixth was unreachable by name: the router had never
+ * heard of it and quietly described a different table instead.
+ */
+async function loadCatalogue(call) {
+  const seen = new Set(context.tables.map((t) => t.table_id));
+  let cursor = null;
+  for (let page = 0; page < 50; page++) {
+    const payload = await call('table_list', cursor ? { cursor } : {});
+    for (const t of payload.tables ?? []) {
+      if (!seen.has(t.table_id)) {
+        seen.add(t.table_id);
+        context.tables.push(t);
+      }
+    }
+    cursor = payload.cursor ?? null;
+    if (!cursor) break;
+  }
+  context.tableId ??= context.tables[0]?.table_id ?? null;
+  return context.tables;
 }
 
 const AGGREGATES = [
@@ -202,29 +266,55 @@ const AGGREGATES = [
   [/\b(how many|count|number of)\b/i, 'count'],
 ];
 
-/** Match a spoken fragment against the columns we know about. */
+/**
+ * Match a spoken fragment against the columns we know about.
+ *
+ * Scored over every segment of the header path rather than only the last one. A
+ * quarterly sheet has four columns whose final segment is "Revenue"; matching on that
+ * alone made all four equally good, and the tie went to whichever came first — so "the
+ * total 2025 Q2 revenue" confidently spoke the 2026 Q1 figure, which is exactly the
+ * kind of wrong a listener cannot catch. Naming the year and the quarter now beats
+ * merely sharing the word revenue.
+ */
 function findColumn(text) {
-  const t = text.toLowerCase();
+  const spoken = new Set(words(text));
   let best = null;
+  let bestScore = 0;
   for (const c of context.columns) {
-    const leaf = (c.header_path?.[c.header_path.length - 1] ?? c.name).toLowerCase();
-    if (t.includes(c.name.toLowerCase()) || t.includes(leaf)) {
-      if (!best || c.name.length > best.name.length) best = c;
+    const path = c.header_path?.length ? c.header_path : [c.name];
+    let score = 0;
+    for (const segment of path) {
+      const terms = words(segment).filter((w) => w.length > 1);
+      if (terms.length && terms.every((w) => spoken.has(w))) score++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = c;
     }
   }
-  return best;
+  return bestScore > 0 ? best : null;
 }
 
 function findCategoryFilter(text) {
-  const t = text.toLowerCase();
+  const spoken = new Set(words(text));
   for (const c of context.columns) {
     for (const v of c.categories ?? []) {
-      if (t.includes(String(v).toLowerCase())) {
+      const terms = words(v).filter((w) => w.length > 1);
+      if (terms.length && terms.every((w) => spoken.has(w))) {
         return { column: c.name, op: 'eq', value: String(v) };
       }
     }
   }
   return null;
+}
+
+/** Does this utterance start something new, rather than answer what we just asked? */
+function startsSomethingNew(t) {
+  return (
+    /\b(what do i have|what files|list|my tables|describe|read|save|bookmark|resume|carry on|where was i|more|compare|how do you know|break it down)\b/.test(t) ||
+    AGGREGATES.some(([re]) => re.test(t)) ||
+    findTable(t) !== null
+  );
 }
 
 /**
@@ -234,6 +324,24 @@ function findCategoryFilter(text) {
  */
 function route(said) {
   const t = said.toLowerCase().trim();
+
+  // Answering a question we asked. "What is the total for engineering" names a filter
+  // but no measure, so we ask which column — and the reply is a bare noun with no verb
+  // in it. Routed from scratch, that fell through to describing the table, losing both
+  // the aggregate and the filter, and the question simply died.
+  if (context.pending) {
+    const pending = context.pending;
+    if (!startsSomethingNew(t)) {
+      const column = findColumn(t);
+      if (column) {
+        context.pending = null;
+        return { tool: 'table_query', args: { ...pending.args, aggregate_column: column.name } };
+      }
+    }
+    // Either they changed the subject, or we still cannot tell. Drop it rather than
+    // trapping them in a question they have no way out of.
+    context.pending = null;
+  }
 
   if (/\b(what do i have|what files|list|my tables|what.s available)\b/.test(t)) {
     return { tool: 'table_list', args: {} };
@@ -249,6 +357,8 @@ function route(said) {
     context.columns = [];
     context.lastAnswerId = null;
     context.lastCursor = null;
+    context.lastCall = null;
+    context.row = null;
     // Orient on arrival unless they already asked something specific: naming a table
     // you have not opened is a request to know what is in it.
     if (!/\b(total|sum|average|mean|how many|count|highest|lowest|compare)\b/.test(t)) {
@@ -263,18 +373,36 @@ function route(said) {
     return { tool: 'table_explain', args: { answer_id: context.lastAnswerId } };
   }
 
-  if (/\b(more|keep going|go on|continue|next)\b/.test(t) && context.lastCall) {
-    return {
-      tool: context.lastCall.tool,
-      args: { ...context.lastCall.args, ...(context.lastCursor ? { cursor: context.lastCursor } : {}) },
-    };
+  if (/\b(more|keep going|go on|continue|next)\b/.test(t)) {
+    if (context.lastCall && context.lastCursor) {
+      // The cursor supersedes whatever position the previous call started from.
+      // Sending both meant the server saw the old start_row and replayed it, so
+      // "keep going" read the same five rows forever.
+      const args = { ...context.lastCall.args, cursor: context.lastCursor };
+      delete args.start_row;
+      return { tool: context.lastCall.tool, args };
+    }
+    if (context.lastCall) {
+      return { speak: 'That was all of it — nothing more to read.' };
+    }
   }
 
   if (/\b(save|bookmark|remember) (my |this |the )?(place|spot|position|here)\b/.test(t) || /\bbookmark this\b/.test(t)) {
-    return { tool: 'table_bookmark', args: { name: 'my place', table_id: context.tableId, row: 1 } };
+    // Saving row 1 regardless of how far they had read defeated the whole feature: the
+    // one thing whose purpose is not losing your place lost your place.
+    return {
+      tool: 'table_bookmark',
+      args: {
+        name: context.bookmarkName ?? 'my place',
+        table_id: context.tableId,
+        row: context.row ?? 1,
+      },
+    };
   }
-  if (/\b(carry on|resume|pick up|where was i|back to)\b/.test(t)) {
-    return { tool: 'table_resume', args: {} };
+  if (/\b(carry on|resume|pick up|where was i)\b/.test(t) || /\bback to (my|the) (place|spot|bookmark)\b/.test(t)) {
+    // Called with no name this lists what is saved instead of going anywhere, which is
+    // not what "carry on" means.
+    return { tool: 'table_resume', args: context.bookmarkName ? { name: context.bookmarkName } : {} };
   }
 
   if (/\b(compare|versus|vs\.?|against|difference between)\b/.test(t)) {
@@ -298,11 +426,19 @@ function route(said) {
     const column = findColumn(t);
     const filter = findCategoryFilter(t);
     if (agg[1] !== 'count' && !column) {
-      return {
-        speak: context.columns.length
-          ? `Which column? I have ${context.columns.map((c) => c.name).join(', ')}.`
-          : 'Open a table first — say, what do I have.',
+      if (!context.columns.length) {
+        return { speak: 'Open a table first — say, what do I have.' };
+      }
+      // Hold the half-formed question so the answer completes it rather than starting
+      // the whole exchange over.
+      context.pending = {
+        args: {
+          table_id: context.tableId,
+          aggregate: agg[1],
+          ...(filter ? { filters: [filter] } : {}),
+        },
       };
+      return { speak: `Which column? I have ${context.columns.map((c) => c.name).join(', ')}.` };
     }
     return {
       tool: 'table_query',
@@ -341,6 +477,12 @@ function absorb(tool, args, payload) {
   if (payload.answer_id) context.lastAnswerId = payload.answer_id;
   if (payload.columns) context.columns = payload.columns;
   if (payload.table_id) context.tableId = payload.table_id;
+  // Where they are now, so "save my place" saves this rather than the top of the table.
+  if (typeof payload.start_row === 'number') context.row = payload.start_row;
+  if (typeof payload.row === 'number') context.row = payload.row;
+  if ((tool === 'table_bookmark' || tool === 'table_resume') && payload.name) {
+    context.bookmarkName = payload.name;
+  }
   if (tool === 'table_list' && payload.tables?.length) {
     // Accumulate across pages rather than replacing, so "the countries one" still
     // resolves after the user has paged past it.
@@ -350,4 +492,4 @@ function absorb(tool, args, payload) {
   }
 }
 
-export { McpClient, Voice, route, absorb, context };
+export { McpClient, Voice, route, absorb, loadCatalogue, context };
