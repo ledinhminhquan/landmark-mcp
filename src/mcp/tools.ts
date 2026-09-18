@@ -524,13 +524,18 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
       if (isFailure(target)) return target;
 
       const answerId = await store.putAnswer({
-        tableId: table.id,
-        regionId: region.id,
-        sheet: region.sheet,
-        cells: run.provenance.cells,
-        cellCount: run.provenance.cellCount,
-        excluded: run.provenance.excluded,
-        path: target?.path ?? [],
+        parts: [
+          {
+            label: target?.spoken ?? 'the matching rows',
+            tableId: table.id,
+            regionId: region.id,
+            sheet: region.sheet,
+            cells: run.provenance.cells,
+            cellCount: run.provenance.cellCount,
+            excluded: run.provenance.excluded,
+            path: target?.path ?? [],
+          },
+        ],
         spec: args,
         structureRevision: found.revision,
       });
@@ -589,37 +594,61 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
           'Ask the question again and I will keep it this time.',
         );
       }
-      const cells = a.cells.slice(0, limit);
-      let spoken = speakExplain(cells, a.cellCount, a.path, a.excluded, a.sheet);
+      // Each operand keeps its own sheet, cells and heading. A comparison that
+      // pooled them would have to pick one heading for both, which is how this tool
+      // came to tell people that the second column's cells held the first column's
+      // measure.
+      const perPart = a.parts.map((p) => ({
+        label: p.label,
+        sheet: p.sheet,
+        cells: p.cells.slice(0, limit),
+        totalCells: p.cellCount,
+        path: p.path,
+        excluded: p.excluded,
+      }));
+      let spoken = speakExplain(perPart);
 
       // If the reading of the table changed after this answer was given, the cells
       // below still name where the number came from, but the columns they sit under
       // may no longer be the ones that were spoken. Say so rather than presenting
       // evidence from one reading as though it belonged to another.
-      const current = await located(index, store, a.tableId, a.regionId);
+      const first = a.parts[0];
+      const current = first ? await located(index, store, first.tableId, first.regionId) : null;
       const staleRevision =
-        !isFailure(current) && current.revision !== a.structureRevision;
+        current !== null && !isFailure(current) && current.revision !== a.structureRevision;
       if (staleRevision) {
         spoken +=
           ' Note that you changed how this table is read after I gave that answer, so ask it again for a current one.';
       }
 
       // The widget needs the surrounding region, not just the cell list — a
-      // highlighted cell with no neighbours conveys nothing. Bounded so a large
-      // sheet cannot turn an explanation into a payload.
-      // A missing region is not worth failing the explanation over — the spoken
-      // answer stands on its own and the widget is the optional half.
-      const visual = isFailure(current)
-        ? null
-        : { grid: buildGrid(current.region, a.cells), title: current.region.title };
+      // highlighted cell with no neighbours conveys nothing. It draws the first
+      // operand's region; a missing region is not worth failing the explanation
+      // over, because the spoken answer stands on its own.
+      const visual =
+        current === null || isFailure(current)
+          ? null
+          : {
+              grid: buildGrid(current.region, first?.cells ?? []),
+              title: current.region.title,
+            };
 
       return ok(spoken, {
-        sheet: a.sheet,
-        cells,
-        total_cells: a.cellCount,
-        header_path: a.path,
-        excluded: a.excluded.map((e) => ({ address: e.address, reason: e.reason })),
-        more_available: a.cells.length > cells.length,
+        parts: perPart.map((p) => ({
+          name: p.label,
+          sheet: p.sheet,
+          cells: p.cells,
+          total_cells: p.totalCells,
+          header_path: p.path,
+          excluded: p.excluded.map((e) => ({ address: e.address, reason: e.reason })),
+        })),
+        // Flattened view of the first operand, for callers expecting one set.
+        sheet: first?.sheet ?? null,
+        cells: perPart[0]?.cells ?? [],
+        total_cells: first?.cellCount ?? 0,
+        header_path: first?.path ?? [],
+        excluded: (first?.excluded ?? []).map((e) => ({ address: e.address, reason: e.reason })),
+        more_available: a.parts.some((p) => p.cells.length > limit),
         structure_revision: a.structureRevision,
         structure_changed_since: staleRevision,
         ...(visual ?? {}),
@@ -741,13 +770,28 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
       const pctPhrase = pct !== null && pct < 1000 ? `, about ${Math.round(pct)}%` : '';
 
       const answerId = await store.putAnswer({
-        tableId: left.table.id,
-        regionId: left.region.id,
-        sheet: left.region.sheet,
-        cells: [...a.provenance.cells, ...b.provenance.cells].slice(0, 200),
-        cellCount: a.provenance.cellCount + b.provenance.cellCount,
-        excluded: [...a.provenance.excluded, ...b.provenance.excluded],
-        path: lc.path,
+        parts: [
+          {
+            label: lc.spoken,
+            tableId: left.table.id,
+            regionId: left.region.id,
+            sheet: left.region.sheet,
+            cells: a.provenance.cells,
+            cellCount: a.provenance.cellCount,
+            excluded: a.provenance.excluded,
+            path: lc.path,
+          },
+          {
+            label: rc.spoken,
+            tableId: right.table.id,
+            regionId: right.region.id,
+            sheet: right.region.sheet,
+            cells: b.provenance.cells,
+            cellCount: b.provenance.cellCount,
+            excluded: b.provenance.excluded,
+            path: rc.path,
+          },
+        ],
         spec: args,
         structureRevision: left.revision,
       });

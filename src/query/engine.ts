@@ -268,17 +268,58 @@ export function runQuery(region: IndexRegion, spec: QuerySpec): QueryResult {
     };
   }
 
-  // ── count needs no target column ────────────────────────────────────────
+  // ── count needs no target column, but it does need grouping ─────────────
+  //
+  // This used to return before grouping was applied, so "how many by region"
+  // answered with one total and no breakdown — and its provenance claimed a cell
+  // count while naming no cells, which made explaining a count read as nonsense.
+  // A count reads the rows it counted, so its evidence is those rows' identifying
+  // cells.
   if (aggregate === 'count') {
+    const identifying = region.labelColumn ?? 0;
+    const countedCells = matching
+      .slice(0, PROVENANCE_CELL_CAP)
+      .map((i) => address(i, identifying));
+    const countProvenance: Provenance = {
+      sheet: region.sheet,
+      cells: countedCells,
+      cellCount: matching.length,
+      excluded: [],
+    };
+
+    if (!spec.groupBy) {
+      return {
+        result: matching.length,
+        matchedRows: matching.length,
+        rows: [],
+        rowIndices: [],
+        groups: [],
+        provenance: countProvenance,
+        moreAvailable: false,
+        nextOffset: null,
+      };
+    }
+
+    const by = resolveColumn(region, spec.groupBy);
+    const tally = new Map<string, number>();
+    for (const i of matching) {
+      const key = String(region.rows[i]![by.i] ?? '(blank)');
+      tally.set(key, (tally.get(key) ?? 0) + 1);
+    }
+    const all: GroupResult[] = [...tally.entries()]
+      .map(([key, n]) => ({ key, value: n, rowCount: n }))
+      .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+    const page = all.slice(offset, offset + limit);
+
     return {
       result: matching.length,
       matchedRows: matching.length,
       rows: [],
       rowIndices: [],
-      groups: [],
-      provenance: { sheet: region.sheet, cells: [], cellCount: matching.length, excluded: [] },
-      moreAvailable: false,
-      nextOffset: null,
+      groups: page,
+      provenance: countProvenance,
+      moreAvailable: offset + page.length < all.length,
+      nextOffset: offset + page.length < all.length ? offset + page.length : null,
     };
   }
 

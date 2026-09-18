@@ -184,6 +184,15 @@ export function speakQuery(
   const agg = spec.aggregate ?? 'none';
 
   if (agg === 'count') {
+    // A grouped count answers "how many in each", which is a different sentence from
+    // a single total and was previously collapsed into one.
+    if (q.groups.length) {
+      const named = q.groups.map((g) => `${g.key || 'unlabelled'}, ${plural(g.value ?? 0, 'row')}`);
+      return capWords(
+        `${speakList(named)}.` + (q.moreAvailable ? ' Say more for the rest.' : ''),
+        SPOKEN_WORD_LIMIT,
+      );
+    }
     return capWords(
       `${plural(q.result ?? 0, 'row')} ${(q.result ?? 0) === 1 ? 'matches' : 'match'}.`,
       HEADLINE_WORD_LIMIT,
@@ -225,30 +234,51 @@ export function speakQuery(
   return capWords(head, HEADLINE_WORD_LIMIT);
 }
 
-export function speakExplain(
-  cells: readonly string[],
-  totalCells: number,
-  path: readonly string[],
-  excluded: readonly ExcludedCell[],
-  sheet: string,
-): string {
-  if (totalCells === 0) {
+export interface ExplainPart {
+  readonly label: string;
+  readonly sheet: string;
+  readonly cells: readonly string[];
+  readonly totalCells: number;
+  readonly path: readonly string[];
+  readonly excluded: readonly ExcludedCell[];
+}
+
+/**
+ * Read back where an answer came from, one operand at a time.
+ *
+ * A comparison has two sides, on possibly different sheets, under different
+ * headings. Speaking them as one pooled range forces a single heading onto both and
+ * misnames half the evidence — which defeats the only mechanism a listener has for
+ * checking a number they cannot see.
+ */
+export function speakExplain(parts: readonly ExplainPart[]): string {
+  if (parts.length === 0 || parts.every((p) => p.totalCells === 0)) {
     return 'That answer did not read any cells — it came from the row count alone.';
   }
-  const range =
-    cells.length > 1
-      ? `${cells[0]} through ${cells[cells.length - 1]}`
-      : (cells[0] ?? 'one cell');
-  const what = path.length ? ` Each one is ${path.join(', ')}.` : '';
-  const skipped = excluded.length
-    ? ` ${plural(excluded.length, 'cell')} did not count: ${speakList(excluded.slice(0, 5).map((e) => `${e.address} ${e.reason}`))}.`
-    : '';
-  const shown =
-    totalCells > cells.length ? ` I am naming ${cells.length} of ${totalCells}.` : '';
-  return capWords(
-    `That came from ${range} on ${sheet}.${what}${skipped}${shown}`,
-    SPOKEN_WORD_LIMIT,
-  );
+
+  const describe = (p: ExplainPart, named: boolean): string => {
+    const range =
+      p.cells.length > 1
+        ? `${p.cells[0]} through ${p.cells[p.cells.length - 1]}`
+        : (p.cells[0] ?? 'one cell');
+    const lead = named ? `${p.label} came from ${range} on ${p.sheet}` : `That came from ${range} on ${p.sheet}`;
+    const what = !named && p.path.length ? ` Each one is ${p.path.join(', ')}.` : '.';
+    const skipped = p.excluded.length
+      ? ` ${plural(p.excluded.length, 'cell')} did not count: ${speakList(p.excluded.slice(0, 3).map((e) => `${e.address} ${e.reason}`))}.`
+      : '';
+    const shown =
+      p.totalCells > p.cells.length ? ` I am naming ${p.cells.length} of ${p.totalCells}.` : '';
+    return lead + what + skipped + shown;
+  };
+
+  // One operand reads as a statement; several are named so the listener can tell
+  // which set of cells belongs to which measure.
+  const text =
+    parts.length === 1
+      ? describe(parts[0]!, false)
+      : parts.map((p) => describe(p, true)).join(' ');
+
+  return capWords(text, SPOKEN_WORD_LIMIT);
 }
 
 /**

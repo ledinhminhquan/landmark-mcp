@@ -18,6 +18,8 @@ import { KVStore, type KVLike } from './mcp/store.ts';
 export interface Env {
   /** Optional. Without it, bookmarks live only as long as one isolate. */
   LANDMARK_KV?: KVLike;
+  /** Comma-separated browser origins allowed to call /mcp. Enables Origin checking. */
+  LANDMARK_ALLOWED_ORIGINS?: string;
 }
 
 let handler: ((request: Request) => Promise<Response>) | null = null;
@@ -27,7 +29,10 @@ export default {
     handler ??= createHandler({
       index: index as never,
       ...(env.LANDMARK_KV
-        ? { makeStore: () => new KVStore(env.LANDMARK_KV as KVLike, 'shared') }
+        ? { makeStore: (key: string) => new KVStore(env.LANDMARK_KV as KVLike, key) }
+        : {}),
+      ...(env.LANDMARK_ALLOWED_ORIGINS
+        ? { allowedOrigins: env.LANDMARK_ALLOWED_ORIGINS.split(',').map((o) => o.trim()) }
         : {}),
     });
     return handler(request);

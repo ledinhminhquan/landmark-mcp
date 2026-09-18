@@ -20,15 +20,31 @@
 
 import type { ExcludedCell } from '../query/engine.ts';
 
-export interface StoredAnswer {
+/**
+ * One side of an answer, with the cells that produced it.
+ *
+ * A comparison reads two columns, often on different sheets. Storing one flat set of
+ * addresses and one heading meant explaining a comparison labelled the second
+ * column's cells with the first column's name — telling someone that C6 and C7 hold
+ * "Target" when they hold "Actual". The one feature that lets a listener check a
+ * number was misreporting half of it, so provenance is per operand.
+ */
+export interface AnswerPart {
+  /** What to call this side aloud: "2026, Q1, Revenue". */
+  readonly label: string;
   readonly tableId: string;
   readonly regionId: string;
   readonly sheet: string;
   readonly cells: readonly string[];
   readonly cellCount: number;
   readonly excluded: readonly ExcludedCell[];
-  /** Header path of the aggregated column, for "each one is 2026, Q2, Revenue". */
+  /** Heading path of the aggregated column, for "each one is 2026, Q2, Revenue". */
   readonly path: readonly string[];
+}
+
+export interface StoredAnswer {
+  /** One entry for a plain query; one per operand for a comparison. */
+  readonly parts: readonly AnswerPart[];
   /** Enough of the query to re-run a continuation. */
   readonly spec: unknown;
   /**
@@ -73,13 +89,22 @@ export interface Store {
 }
 
 /**
- * Answer ids are sequential rather than random.
+ * Answer ids must be unique across every process that shares a backing store.
  *
- * A random id would be fine functionally, but these are occasionally read out during
- * development and always compared in tests, and a deterministic sequence makes both
- * bearable. They are not secrets: an id is only useful to a caller who already has
- * the session.
+ * They used to be a counter starting at zero inside each store instance. Two Worker
+ * isolates writing to the same namespace therefore both minted `a1`, and the second
+ * silently overwrote the first — so asking "how do you know" could return the
+ * working for somebody else's question. A short random suffix removes the collision
+ * without making the id unreadable when it appears in a log.
  */
+function mintId(seq: number): string {
+  const rand =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0');
+  return `a${seq}-${rand}`;
+}
+
 export class MemoryStore implements Store {
   #answers = new Map<string, StoredAnswer>();
   #bookmarks = new Map<string, Bookmark>();
@@ -94,7 +119,7 @@ export class MemoryStore implements Store {
   }
 
   async putAnswer(answer: StoredAnswer): Promise<string> {
-    const id = `a${++this.#seq}`;
+    const id = mintId(++this.#seq);
     this.#answers.set(id, answer);
     // Map preserves insertion order, so the oldest key is the first one.
     while (this.#answers.size > this.#maxAnswers) {
@@ -153,14 +178,20 @@ export class KVStore implements Store {
   readonly #kv: KVLike;
   #seq = 0;
   readonly #sessionPrefix: string;
+  readonly #bookmarkPrefix: string;
 
   constructor(kv: KVLike, sessionId: string) {
     this.#kv = kv;
     this.#sessionPrefix = `ans:${sessionId}:`;
+    // Bookmarks were keyed by name alone, so two people using the same deployment
+    // both saved "my place" to the same key and each kept overwriting the other.
+    // Without authentication the server cannot identify a person, only a session —
+    // so that is what it scopes to, and the README says exactly that.
+    this.#bookmarkPrefix = `bm:${sessionId}:`;
   }
 
   async putAnswer(answer: StoredAnswer): Promise<string> {
-    const id = `a${++this.#seq}`;
+    const id = mintId(++this.#seq);
     await this.#kv.put(this.#sessionPrefix + id, JSON.stringify(answer), {
       expirationTtl: 3600,
     });
@@ -172,11 +203,11 @@ export class KVStore implements Store {
   }
 
   async putBookmark(name: string, mark: Bookmark): Promise<void> {
-    await this.#kv.put(`bm:${name.trim().toLowerCase()}`, JSON.stringify(mark));
+    await this.#kv.put(this.#bookmarkPrefix + name.trim().toLowerCase(), JSON.stringify(mark));
   }
 
   async getBookmark(name: string): Promise<Bookmark | null> {
-    return ((await this.#kv.get(`bm:${name.trim().toLowerCase()}`, 'json')) as Bookmark) ?? null;
+    return ((await this.#kv.get(this.#bookmarkPrefix + name.trim().toLowerCase(), 'json')) as Bookmark) ?? null;
   }
 
   async getStructure(regionKey: string): Promise<StructureOverride | null> {
@@ -193,11 +224,11 @@ export class KVStore implements Store {
   }
 
   async listBookmarks(): Promise<readonly { name: string; mark: Bookmark }[]> {
-    const { keys } = await this.#kv.list({ prefix: 'bm:' });
+    const { keys } = await this.#kv.list({ prefix: this.#bookmarkPrefix });
     const out: { name: string; mark: Bookmark }[] = [];
     for (const k of keys) {
       const mark = (await this.#kv.get(k.name, 'json')) as Bookmark | null;
-      if (mark) out.push({ name: k.name.slice(3), mark });
+      if (mark) out.push({ name: k.name.slice(this.#bookmarkPrefix.length), mark });
     }
     return out;
   }
