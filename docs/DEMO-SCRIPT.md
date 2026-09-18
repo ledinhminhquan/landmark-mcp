@@ -25,7 +25,7 @@ rewrite it.
 | 1:30–1:50 | Switch to the merged-header file. Describe it. Four columns all labelled "Revenue" come back as `2026, Q1, Revenue` … | *"Four columns here are all called Revenue. The server rebuilds the full heading path, so each one can be named and asked for."* (23 w) | Tech Implementation |
 | 1:50–2:05 | Spoken: "compare 2026 Q1 revenue and 2025 Q1 revenue". One sentence with the difference and direction. | *"Cross-column questions come back as one sentence, so nobody holds two numbers in their head and subtracts."* (18 w) | Design |
 | 2:05–2:20 | Spoken: "save my place". Reload the page. Spoken: "carry on". It re-orients. | *"A long table is a job you come back to. Bookmarks survive the session and re-orient before reading."* (18 w) | Quality of the Idea |
-| 2:20–2:40 | Split: DevTools network tab showing the POST to `/mcp` and the `2025-11-25` handshake, beside the terminal running the test suite green. | *"Every answer in this video was a live MCP call over Streamable HTTP, spec 2025-11-25. Sixty tests, and the arithmetic happens in the server — never in a language model."* (30 w) | Tech Implementation |
+| 2:20–2:40 | Split: DevTools network tab showing the POST to `/mcp` and the `2025-11-25` handshake, beside the terminal running the test suite green. | *"Every answer in this video was a live MCP call over Streamable HTTP, spec 2025-11-25. A hundred tests, and the arithmetic happens in the server — never in a language model."* (30 w) | Tech Implementation |
 | 2:40–2:55 | Back to the idle ring. | *"Landmark. Open source, MIT. Built for people who need the answer, not the grid."* (14 w) | — |
 
 **Total narration: ~232 words ≈ 1:33 spoken**, leaving roughly half the runtime for the
@@ -84,5 +84,10 @@ quietly fakes its input is worse than one that explains its capture method.
   synthesised speech in this demo will not match, and an expert judge will know. The
   claim is situational: screenless, hands-free, and for questions whose answers need
   aggregating across hundreds of cells, where traversal genuinely is the wrong tool.
-- **Do not say "first".** Say what was checked: the MCP registry's accessibility servers
-  are all developer-facing auditing tools. That is reproducible; "first" is not.
+- **Do not say "first", and do not say the registry has no assistive server.** The
+  second was in an earlier draft of this script and it is false: NeuroDock publishes
+  end-user assistive servers for cognitive support. The registry's `search` matches
+  server *names* only, so it could not have settled the question in either direction.
+  Say instead: "we could not find an MCP server that lets a blind person interrogate
+  their own spreadsheet by voice." That is honest about being an observation, and it is
+  the one thing here a judge cannot falsify in a single query on camera.
