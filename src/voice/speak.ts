@@ -118,7 +118,7 @@ export function speakDescribe(region: IndexRegion, full: boolean): string {
   parts.push(`${name} has ${plural(region.rowCount, 'row')} and ${plural(region.columns.length, 'column')}.`);
 
   if (region.headerRows.length === 0) {
-    parts.push('I could not find a header row, so I will call the columns by position.');
+    parts.push('I am treating every row as data, with no headings.');
   } else {
     const named = region.columns.filter((c) => c.path.length > 0);
     parts.push(`The columns are ${speakList(named.map((c) => c.spoken))}.`);
@@ -149,7 +149,20 @@ export function speakDescribe(region: IndexRegion, full: boolean): string {
     parts.push('Some columns share a heading, so tell me the full heading if I pick the wrong one.');
   }
 
-  return capWords(parts.join(' '), full ? SPOKEN_WORD_LIMIT : HEADLINE_WORD_LIMIT + 20);
+  // The uncertainty warning is composed last so it reads in its natural place, then
+  // appended AFTER the budget is applied so length can never remove it. A listener
+  // who cannot see the sheet has no other way to learn that the reading is a guess;
+  // trimming that sentence to save four words would take away their only recourse.
+  let warning = '';
+  if (region.structure.ambiguous) {
+    const alt = region.structure.alternatives[0];
+    warning =
+      ` I am not certain how to read the headings${alt ? `; I could instead ${alt.why}` : ''}.` +
+      ' Say "check the structure" if a column name sounds like data.';
+  }
+
+  const budget = full ? SPOKEN_WORD_LIMIT : HEADLINE_WORD_LIMIT + 20;
+  return capWords(parts.join(' '), Math.max(8, budget - wordCount(warning))) + warning;
 }
 
 function excludedPhrase(excluded: readonly ExcludedCell[]): string {

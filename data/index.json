@@ -1,12 +1,12 @@
 {
- "version": 1,
+ "version": 2,
  "tables": [
   {
    "id": "01-flat",
    "title": "01 flat",
    "format": "xlsx",
    "sourceName": "01-flat.xlsx",
-   "ingestedAt": "2026-09-08T18:27:31.612Z",
+   "ingestedAt": "2026-09-18T11:19:47.046Z",
    "regions": [
     {
      "id": "sales.t1",
@@ -15,7 +15,56 @@
      "headerRows": [
       0
      ],
-     "headerConfidence": 1,
+     "headerConfidence": 0.78,
+     "structure": {
+      "chosen": {
+       "headerRows": 1,
+       "score": 0.78,
+       "why": "labels sit above values of a different kind"
+      },
+      "alternatives": [],
+      "ambiguous": false,
+      "revision": 1
+     },
+     "startRow": 0,
+     "allRows": [
+      [
+       "Region",
+       "Rep",
+       "Revenue",
+       "Closed"
+      ],
+      [
+       "North",
+       "Anh",
+       12400,
+       "2026-07-04T00:00:00.000Z"
+      ],
+      [
+       "North",
+       "Bảo",
+       8150,
+       "2026-07-19T00:00:00.000Z"
+      ],
+      [
+       "South",
+       "Chi",
+       21000,
+       "2026-08-02T00:00:00.000Z"
+      ],
+      [
+       "South",
+       "Dũng",
+       3900,
+       "2026-08-27T00:00:00.000Z"
+      ],
+      [
+       "East",
+       "An",
+       15600,
+       "2026-09-01T00:00:00.000Z"
+      ]
+     ],
      "firstDataRow": 1,
      "firstCol": 0,
      "rowCount": 5,
@@ -118,7 +167,7 @@
    "title": "02 stacked header",
    "format": "xlsx",
    "sourceName": "02-stacked-header.xlsx",
-   "ingestedAt": "2026-09-08T18:27:31.617Z",
+   "ingestedAt": "2026-09-18T11:19:47.064Z",
    "regions": [
     {
      "id": "quarterly.t1",
@@ -128,7 +177,50 @@
       0,
       1
      ],
-     "headerConfidence": 1,
+     "headerConfidence": 0.79,
+     "structure": {
+      "chosen": {
+       "headerRows": 2,
+       "score": 0.79,
+       "why": "a grouping row sits above a denser one, over a row of labels"
+      },
+      "alternatives": [],
+      "ambiguous": false,
+      "revision": 1
+     },
+     "startRow": 0,
+     "allRows": [
+      [
+       null,
+       "Q1",
+       "Q2",
+       "Q3"
+      ],
+      [
+       "Region",
+       "Revenue",
+       "Revenue",
+       "Revenue"
+      ],
+      [
+       "North",
+       1200,
+       1400,
+       1500
+      ],
+      [
+       "South",
+       900,
+       950,
+       1100
+      ],
+      [
+       "East",
+       700,
+       820,
+       910
+      ]
+     ],
      "firstDataRow": 2,
      "firstCol": 0,
      "rowCount": 3,
@@ -232,7 +324,7 @@
    "title": "03 merged header",
    "format": "xlsx",
    "sourceName": "03-merged-header.xlsx",
-   "ingestedAt": "2026-09-08T18:27:31.623Z",
+   "ingestedAt": "2026-09-18T11:19:47.083Z",
    "regions": [
     {
      "id": "compare.t1",
@@ -243,7 +335,55 @@
       1,
       2
      ],
-     "headerConfidence": 1,
+     "headerConfidence": 0.79,
+     "structure": {
+      "chosen": {
+       "headerRows": 3,
+       "score": 0.79,
+       "why": "headings are stacked above the row that names the values"
+      },
+      "alternatives": [],
+      "ambiguous": false,
+      "revision": 1
+     },
+     "startRow": 0,
+     "allRows": [
+      [
+       null,
+       "2026",
+       "2026",
+       "2025",
+       "2025"
+      ],
+      [
+       null,
+       "Q1",
+       "Q2",
+       "Q1",
+       "Q2"
+      ],
+      [
+       "Region",
+       "Revenue",
+       "Revenue",
+       "Revenue",
+       "Revenue"
+      ],
+      [
+       "North",
+       1200,
+       1400,
+       1100,
+       1000
+      ],
+      [
+       "South",
+       900,
+       950,
+       800,
+       850
+      ]
+     ],
      "firstDataRow": 3,
      "firstCol": 0,
      "rowCount": 2,
@@ -353,7 +493,16 @@
        850
       ]
      ],
-     "inherited": [],
+     "inherited": [
+      {
+       "at": "C1",
+       "from": "B1"
+      },
+      {
+       "at": "E1",
+       "from": "D1"
+      }
+     ],
      "labelColumn": 0,
      "ambiguousColumns": []
     }
@@ -365,7 +514,7 @@
    "title": "04 title and vmerge",
    "format": "xlsx",
    "sourceName": "04-title-and-vmerge.xlsx",
-   "ingestedAt": "2026-09-08T18:27:31.640Z",
+   "ingestedAt": "2026-09-18T11:19:47.122Z",
    "regions": [
     {
      "id": "budget.t1",
@@ -374,7 +523,50 @@
      "headerRows": [
       1
      ],
-     "headerConfidence": 1,
+     "headerConfidence": 0.7,
+     "structure": {
+      "chosen": {
+       "headerRows": 1,
+       "score": 0.7,
+       "why": "labels sit above values of a different kind"
+      },
+      "alternatives": [],
+      "ambiguous": false,
+      "revision": 1
+     },
+     "startRow": 1,
+     "allRows": [
+      [
+       "Department",
+       "Line item",
+       "Amount"
+      ],
+      [
+       "Engineering",
+       "Salaries",
+       480000
+      ],
+      [
+       "Engineering",
+       "Tooling",
+       62000
+      ],
+      [
+       "Engineering",
+       "Travel",
+       18000
+      ],
+      [
+       "Design",
+       "Salaries",
+       210000
+      ],
+      [
+       "Design",
+       "Software",
+       24000
+      ]
+     ],
      "firstDataRow": 2,
      "firstCol": 0,
      "rowCount": 5,
@@ -477,7 +669,7 @@
    "title": "05 three regions",
    "format": "xlsx",
    "sourceName": "05-three-regions.xlsx",
-   "ingestedAt": "2026-09-08T18:27:31.646Z",
+   "ingestedAt": "2026-09-18T11:19:47.135Z",
    "regions": [
     {
      "id": "mixed.t1",
@@ -486,7 +678,32 @@
      "headerRows": [
       0
      ],
-     "headerConfidence": 1,
+     "headerConfidence": 0.78,
+     "structure": {
+      "chosen": {
+       "headerRows": 1,
+       "score": 0.78,
+       "why": "labels sit above values of a different kind"
+      },
+      "alternatives": [],
+      "ambiguous": false,
+      "revision": 1
+     },
+     "startRow": 0,
+     "allRows": [
+      [
+       "Product",
+       "Units"
+      ],
+      [
+       "Widget",
+       120
+      ],
+      [
+       "Gadget",
+       45
+      ]
+     ],
      "firstDataRow": 1,
      "firstCol": 0,
      "rowCount": 2,
@@ -542,7 +759,35 @@
      "headerRows": [
       4
      ],
-     "headerConfidence": 1,
+     "headerConfidence": 0.85,
+     "structure": {
+      "chosen": {
+       "headerRows": 1,
+       "score": 0.85,
+       "why": "labels sit above values of a different kind"
+      },
+      "alternatives": [],
+      "ambiguous": false,
+      "revision": 1
+     },
+     "startRow": 4,
+     "allRows": [
+      [
+       "Region",
+       "Target",
+       "Actual"
+      ],
+      [
+       "North",
+       10000,
+       12400
+      ],
+      [
+       "South",
+       9000,
+       3900
+      ]
+     ],
      "firstDataRow": 5,
      "firstCol": 0,
      "rowCount": 2,
@@ -617,7 +862,34 @@
      "headerRows": [
       8
      ],
-     "headerConfidence": 1,
+     "headerConfidence": 0.55,
+     "structure": {
+      "chosen": {
+       "headerRows": 1,
+       "score": 0.55,
+       "why": "the first row reads as labels"
+      },
+      "alternatives": [
+       {
+        "headerRows": 0,
+        "score": 0.45,
+        "why": "treat every row as data"
+       }
+      ],
+      "ambiguous": true,
+      "revision": 1
+     },
+     "startRow": 8,
+     "allRows": [
+      [
+       "Note",
+       "Status"
+      ],
+      [
+       "Q3 close",
+       "pending"
+      ]
+     ],
      "firstDataRow": 9,
      "firstCol": 0,
      "rowCount": 1,
@@ -667,7 +939,7 @@
    "title": "06 countries",
    "format": "csv",
    "sourceName": "06-countries.csv",
-   "ingestedAt": "2026-09-08T18:27:31.649Z",
+   "ingestedAt": "2026-09-18T11:19:47.142Z",
    "regions": [
     {
      "id": "06-countries.t1",
@@ -676,7 +948,74 @@
      "headerRows": [
       0
      ],
-     "headerConfidence": 1,
+     "headerConfidence": 0.78,
+     "structure": {
+      "chosen": {
+       "headerRows": 1,
+       "score": 0.78,
+       "why": "labels sit above values of a different kind"
+      },
+      "alternatives": [],
+      "ambiguous": false,
+      "revision": 1
+     },
+     "startRow": 0,
+     "allRows": [
+      [
+       "Country",
+       "Population",
+       "GDP per capita (USD)",
+       "Region"
+      ],
+      [
+       "Vietnam",
+       "100352192",
+       "4347",
+       "Asia"
+      ],
+      [
+       "Thailand",
+       "71801279",
+       "7297",
+       "Asia"
+      ],
+      [
+       "Indonesia",
+       "277534122",
+       "4788",
+       "Asia"
+      ],
+      [
+       "Kenya",
+       "55100586",
+       "2099",
+       "Africa"
+      ],
+      [
+       "Nigeria",
+       "223804632",
+       "1596",
+       "Africa"
+      ],
+      [
+       "Peru",
+       "34352719",
+       "7126",
+       "Americas"
+      ],
+      [
+       "Norway",
+       "5474360",
+       "87962",
+       "Europe"
+      ],
+      [
+       "Poland",
+       "36685849",
+       "22113",
+       "Europe"
+      ]
+     ],
      "firstDataRow": 1,
      "firstCol": 0,
      "rowCount": 8,
@@ -805,7 +1144,29 @@
      "sheet": "06-countries",
      "title": null,
      "headerRows": [],
-     "headerConfidence": 0,
+     "headerConfidence": 0.5,
+     "structure": {
+      "chosen": {
+       "headerRows": 0,
+       "score": 0.5,
+       "why": "a single row, with nothing beneath it to label"
+      },
+      "alternatives": [
+       {
+        "headerRows": 1,
+        "score": 0.5,
+        "why": "treat the row as a heading"
+       }
+      ],
+      "ambiguous": true,
+      "revision": 1
+     },
+     "startRow": 10,
+     "allRows": [
+      [
+       "Source: illustrative figures for testing only"
+      ]
+     ],
      "firstDataRow": 10,
      "firstCol": 0,
      "rowCount": 1,

@@ -99,7 +99,15 @@ export function detectRegions(grid: Grid): RawRegion[] {
   const flush = (endRow: number) => {
     if (start === null) return;
     const bounds = columnBounds(grid, start, endRow);
-    if (bounds) regions.push({ startRow: start, endRow, ...bounds });
+    if (bounds) {
+      // A band of rows can still hold two unrelated tables side by side. Splitting
+      // on blank rows alone merges them into one region, which then invents a
+      // relationship between an item list and an invoice list that share nothing but
+      // a row number — and reads out column names from both as if they were one table.
+      for (const span of splitOnBlankColumns(grid, start, endRow, bounds.firstCol, bounds.lastCol)) {
+        regions.push({ startRow: start, endRow, ...span });
+      }
+    }
     start = null;
   };
 
@@ -114,6 +122,48 @@ export function detectRegions(grid: Grid): RawRegion[] {
   }
   if (start !== null) flush(grid.length - 1);
   return regions.filter((r) => r.endRow >= r.startRow);
+}
+
+/**
+ * Split a band of rows into column runs separated by columns that are blank all the
+ * way down.
+ *
+ * A column that happens to be empty in the header row is not a separator — a title
+ * row above a table leaves plenty of those. The separator has to be empty across the
+ * *whole* band, which is what makes it a gutter between two tables rather than a gap
+ * inside one.
+ */
+function splitOnBlankColumns(
+  grid: Grid,
+  startRow: number,
+  endRow: number,
+  firstCol: number,
+  lastCol: number,
+): { firstCol: number; lastCol: number }[] {
+  const columnIsBlank = (c: number): boolean => {
+    for (let r = startRow; r <= endRow; r++) {
+      if (!isBlank(grid[r]?.[c] ?? null)) return false;
+    }
+    return true;
+  };
+
+  const runs: { firstCol: number; lastCol: number }[] = [];
+  let runStart: number | null = null;
+  for (let c = firstCol; c <= lastCol; c++) {
+    if (columnIsBlank(c)) {
+      if (runStart !== null) {
+        runs.push({ firstCol: runStart, lastCol: c - 1 });
+        runStart = null;
+      }
+    } else if (runStart === null) {
+      runStart = c;
+    }
+  }
+  if (runStart !== null) runs.push({ firstCol: runStart, lastCol });
+
+  // One run means there was nothing to split; hand back the original bounds so the
+  // common case is untouched.
+  return runs.length ? runs : [{ firstCol, lastCol }];
 }
 
 function columnBounds(
@@ -147,13 +197,42 @@ function columnBounds(
  * names has an all-text header *and* all-text data; a table with a numeric header
  * row like "2021 2022 2023" breaks the type-discontinuity signal entirely.
  */
-export function scoreHeaderRow(
+/**
+ * Why a candidate row scored the way it did.
+ *
+ * A bare number cannot distinguish the two situations that matter most here.
+ * A row can score low because the evidence says it is data, or because the table
+ * offers no evidence either way — an all-numeric row above numeric data is the
+ * classic case, and a human reader cannot resolve it from the values alone either.
+ * The first calls for a decision; the second calls for a question. Collapsing them
+ * into one number is what made this module lose records while reporting confidence.
+ */
+export interface HeaderSignals {
+  readonly score: number;
+  /** Every non-blank candidate cell parses as a number. Inherently ambiguous. */
+  readonly allNumeric: boolean;
+  /** The rows below contain numbers or dates, so a type discontinuity could exist. */
+  readonly typedBelow: boolean;
+  /** Share of comparable columns where label-over-typed-data actually holds, 0..1. */
+  readonly discontinuity: number;
+  /** Share of the row's width that is non-blank, 0..1. */
+  readonly density: number;
+}
+
+export function headerSignals(
   candidate: readonly CellValue[],
   body: Grid,
-): number {
-  if (candidate.length === 0) return 0;
+): HeaderSignals {
+  const empty: HeaderSignals = {
+    score: 0,
+    allNumeric: false,
+    typedBelow: false,
+    discontinuity: 0,
+    density: 0,
+  };
+  if (candidate.length === 0) return empty;
   const cells = candidate.filter((c) => !isBlank(c));
-  if (cells.length === 0) return 0;
+  if (cells.length === 0) return empty;
 
   let score = 0;
 
@@ -198,15 +277,29 @@ export function scoreHeaderRow(
   );
 
   const allNumeric = cells.every((c) => asNumber(c) !== null);
+  const discontinuity = comparable > 0 ? discontinuities / comparable : 0;
+
   if (allNumeric) {
-    // A row like "2021 2022 2023" genuinely is an ambiguous case even for a human.
-    // We report low confidence and let the caller override rather than guess.
+    // A row like "2021 2022 2023" genuinely is ambiguous even for a human. The
+    // penalty stops it being taken as a header silently; the `allNumeric` flag is
+    // what lets the caller ask instead of deciding.
     score *= 0.3;
-  } else if (typedBelow && comparable > 0 && discontinuities / comparable < 0.3) {
+  } else if (typedBelow && comparable > 0 && discontinuity < 0.3) {
     score *= 0.6;
   }
 
-  return Math.min(1, score);
+  return {
+    score: Math.min(1, score),
+    allNumeric,
+    typedBelow,
+    discontinuity,
+    density: cells.length / candidate.length,
+  };
+}
+
+/** The score alone, for callers that only need to compare two rows. */
+export function scoreHeaderRow(candidate: readonly CellValue[], body: Grid): number {
+  return headerSignals(candidate, body).score;
 }
 
 // ---------------------------------------------------------------------------

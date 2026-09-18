@@ -132,7 +132,7 @@ async function call(name: string, args: Record<string, unknown>): Promise<Record
   return result.structuredContent;
 }
 
-test('all eight tools are advertised with descriptions and schemas', async () => {
+test('all nine tools are advertised with descriptions and schemas', async () => {
   const body = await readRpc(await post({ jsonrpc: '2.0', id: 3, method: 'tools/list' }));
   const tools = (body['result'] as { tools: { name: string; description?: string; inputSchema: unknown }[] }).tools;
 
@@ -147,6 +147,7 @@ test('all eight tools are advertised with descriptions and schemas', async () =>
       'table_query',
       'table_read_rows',
       'table_resume',
+      'table_structure',
     ],
   );
   for (const t of tools) {

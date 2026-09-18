@@ -94,16 +94,9 @@ back to the model.
 
 ## Challenges
 
-Three that cost real time, all written up in `docs/FRICTION-LOG.md`:
+The September 13 evidence review corroborated a premature transport-close failure: a delayed SSE tool response became an empty HTTP 200 when we closed the transport before consumption. JSON mode works for our finite responses; keeping the SSE transport alive also works. This is a lifecycle mistake in our integration, not an inherent stateless/SSE conflict.
 
-- The Streamable HTTP transport answered with SSE while my stateless handler closed it
-  in a `finally` block, so the stream died before the message was written and every
-  response came back as an empty 200. Silent failures are expensive.
-- The store was constructed per request, which made `table_explain` and `table_resume`
-  silently useless — every call succeeded and found nothing.
-- A fix for merged headers regressed the stacked-header case, and a fix for that
-  regressed a sheet holding three tables. Structure inference is heuristic, so the six
-  golden fixtures exist precisely because improving one shape can quietly break another.
+Our local review also found application defects in header inference, table/column routing, source provenance and state. They are recorded with scope and reproduction evidence in [INTERNAL-FRICTION.md](INTERNAL-FRICTION.md); they have not been fixed by the feedback revision. Historical notes about intermediate header-regression patches and per-request storage lack original failing transcripts and are qualified in [FRICTION-EVIDENCE.md](FRICTION-EVIDENCE.md).
 
 ## Accomplishments
 
@@ -150,38 +143,14 @@ simulation of the server.
 
 ---
 
-## Product feedback *(required field — do not skip)*
+## Product feedback (required)
 
-**@modelcontextprotocol/sdk 1.30.0** — Used for the server, the Streamable HTTP
-transport and tool registration. Zero to a working endpoint took under an hour, which is
-good. Two things cost time. `registerTool` takes a Zod raw shape while the spec talks in
-JSON Schema, and the type error when you pass JSON Schema does not say so. And the
-SSE-versus-stateless lifetime conflict above produced an empty 200 with no diagnostic —
-`enableJsonResponse: true` is the right default for a stateless deployment and deserves
-to be said out loud in the docs. Would build with it again: yes, unreservedly.
+Use the five-field entries in [PRODUCT-FEEDBACK.md](PRODUCT-FEEDBACK.md). They cover the actual direct tools and distinguish Amazon documentation from private-toolkit or AWS runtime use. No AWS service is demonstrated in this project.
 
-**MCP spec 2025-11-25** — Clear and implementable. `structuredContent` with the mirrored
-text block is a good design and the reason a voice client can consume tool output
-without parsing prose. One friction: quickstart examples in circulation still send
-`2025-06-18` while `LATEST_PROTOCOL_VERSION` is `2025-11-25`, so a newcomer copying an
-example ends up negotiating an older revision with no reason to notice.
+Onboarding durations were not measured. The earlier claims that z.object() was unsupported and that the hand-written Apps bridge worked first time have been withdrawn. See the [evidence ledger](FRICTION-EVIDENCE.md).
 
-**MCP Apps (`ui/resourceUri`)** — Implemented against the core SDK's `_meta` support
-rather than the extension package, because the 2.x line peer-depends on the v2 SDK
-split, zod 4 and React, and the 1.7.x line still pulls React peers to render one static
-document. The metadata contract itself is simple and worked first time. A short
-"server-side, no framework" section in the docs would save the next person the
-reverse-engineering.
+## Friction log and optional feature requests
 
-**Alexa+ MCP Toolkit** — *[Attempt this yourself for thirty minutes before including
-anything here. Report only what you saw first-hand.]*
+Use [FRICTION-LOG.md](FRICTION-LOG.md): seven evidence-qualified entries with all six required fields. The log is retrospective, with documentation observations and newly reproduced local cases labelled by scope and date. [FEATURE-REQUESTS.md](FEATURE-REQUESTS.md) supplies priorities and acceptance checks.
 
-**Cloudflare Workers** — *[Fill in after deploying. Note the signup experience from
-Vietnam, whether a card was required, and how long the first deploy took.]*
-
----
-
-## Friction log
-
-See `docs/FRICTION-LOG.md` — five first-hand entries in the required six-field format.
-**Delete or verify entry 6 before submitting.**
+[INTERNAL-FRICTION.md](INTERNAL-FRICTION.md) records our own application defects; do not attribute them to vendors. A7 edits only these feedback sections and the challenges summary. The remaining submission pitch, benchmarks, deployment and video claims require their own final verification before submission.

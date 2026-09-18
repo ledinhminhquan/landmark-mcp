@@ -1,0 +1,90 @@
+{
+  "checkedAt": "2026-09-12T15:33:10.154Z",
+  "node": "v23.11.0",
+  "scope": "Actual local HTTP process and original modules; simulated standard SSE and iframe messages; no cloud deployment or live speech recognition.",
+  "findings": {
+    "workerAssets": {
+      "/": {
+        "status": 406,
+        "contentType": "application/json",
+        "body": "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32000,\"message\":\"Not Acceptable: Client must accept text/event-stream\"},\"id\":null}"
+      },
+      "/app.js": {
+        "status": 404,
+        "contentType": "application/json",
+        "body": "{\"error\":\"Not found. The MCP endpoint is at /mcp.\"}"
+      }
+    },
+    "localUi": {
+      "status": 200,
+      "hasTitle": true
+    },
+    "realMcpNetwork": {
+      "toolCount": 8,
+      "total": 61050
+    },
+    "actualBrowserClientOverHttp": {
+      "negotiated": "2025-11-25",
+      "result": 61050
+    },
+    "validSsePriming": {
+      "actualError": "Unexpected end of JSON input"
+    },
+    "widgetProtocol": {
+      "initializationMessagesSent": 0,
+      "before": "Ask a question with a number in it, then ask how I know.",
+      "afterStandardNotification": "Ask a question with a number in it, then ask how I know."
+    },
+    "dependencies": {
+      "direct": {
+        "name": "landmark-mcp",
+        "version": "0.1.0",
+        "license": "MIT",
+        "dependencies": {
+          "@modelcontextprotocol/sdk": "1.30.0",
+          "exceljs": "4.4.0",
+          "papaparse": "5.7.0",
+          "zod": "3.25.76"
+        },
+        "bin": {
+          "landmark-mcp": "dist/index.js"
+        },
+        "devDependencies": {
+          "@types/node": "22.10.2",
+          "@types/papaparse": "5.3.15",
+          "typescript": "5.7.2",
+          "wrangler": "^4.130.0"
+        },
+        "engines": {
+          "node": ">=20.11"
+        }
+      },
+      "installHooks": [
+        {
+          "path": "node_modules/esbuild",
+          "version": "0.28.1",
+          "installedScripts": {
+            "postinstall": "node install.js"
+          }
+        },
+        {
+          "path": "node_modules/fsevents",
+          "version": "2.3.3",
+          "optional": true,
+          "os": [
+            "darwin"
+          ],
+          "installedScripts": null
+        },
+        {
+          "path": "node_modules/workerd",
+          "version": "1.20260908.1",
+          "installedScripts": {
+            "postinstall": "node install.js"
+          }
+        }
+      ],
+      "sharp": "0.35.2"
+    }
+  }
+}

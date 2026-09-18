@@ -27,7 +27,7 @@
  */
 
 import { a1, isBlank, type CellValue, type MergeSpan } from './model.ts';
-import { scoreHeaderRow, type Grid } from './infer.ts';
+import { headerSignals, type Grid, type HeaderSignals } from './infer.ts';
 
 /** Where a cell's value came from, so we never silently invent data. */
 export type CellOrigin = 'literal' | 'merge';
@@ -144,35 +144,62 @@ export function buildHeaderPaths(
   return { paths, headerRowCount: headerRows.length, ambiguous };
 }
 
+export interface HeaderCandidate {
+  /** Number of rows read as header. 0 means the region has no header. */
+  readonly rows: number;
+  /** Evidence for this reading, 0..1. */
+  readonly score: number;
+  /** One speakable clause explaining the evidence. */
+  readonly why: string;
+}
+
+export interface HeaderAnalysis {
+  readonly chosen: HeaderCandidate;
+  /** Other readings worth offering, strongest first. May be empty. */
+  readonly alternatives: readonly HeaderCandidate[];
+  /**
+   * True when the evidence does not settle the question. The caller must ask rather
+   * than commit — see `structure` in the index and the `table_structure` tool.
+   */
+  readonly ambiguous: boolean;
+}
+
+/** Above this, a reading is safe to act on without asking. */
+const CONFIDENT = 0.7;
+/** Below this, a row is data, not a label row. */
+const MIN_HEADER = 0.5;
+const MAX_HEADER_ROWS = 3;
+
 /**
- * Detect how many rows at the top of a region are header rows.
+ * Work out how many rows at the top of a region are header, and how sure we are.
  *
- * The obvious approach — walk down and stop when a row stops looking like a header —
- * fails on the shape this module exists for. In
+ * Two rules earn their keep here, and both were learned by losing data.
  *
- *        |   2026   |   2025          <- merged grouping row
- *        | Q1  | Q2 | Q1  | Q2        <- no merges, no type discontinuity
- *   Region| Revenue | Revenue | ...   <- the row that actually names the measures
+ * **Everything above the best-scoring row is header.** That row is the one that
+ * separates labels from data, so rows above it are grouping rows by construction —
+ * this is what recovers `2026 / Q1 / Revenue`.
  *
- * the middle row carries neither of the signals a top-down walk looks for, so the
- * walk stops early and the measure row is read as data.
+ * **Extending DOWNWARD requires positive evidence, not merely another passing score.**
+ * The earlier version extended while the next row also scored above threshold. On a
+ * table that is text from top to bottom every row clears that bar, so an address book
+ * had three rows eaten into its column names and reported full confidence with one
+ * record left. A row only continues the header block if it looks like a *grouping*
+ * row: it spans columns through a horizontal merge, or it is sparser than the row
+ * beneath it. Both are structural facts about the sheet, not restatements of the
+ * score that already chose the row.
  *
- * So work from the bottom of the block instead: find the row that most convincingly
- * separates labels from typed data — the same score `infer.ts` already uses and
- * tests — and take everything from the top of the region down to it. Grouping rows
- * above the real header are, by construction, part of the header.
- *
- * Capped at three rows: past that a spoken path stops being comprehensible and the
- * file needs a human.
+ * Where the evidence genuinely cannot decide — an all-numeric row over numeric data
+ * is the honest example — this returns `ambiguous` with both readings instead of
+ * picking one. A human cannot resolve that from the values either.
  */
-export function detectHeaderRowCount(
+export function analyseHeader(
   resolved: ResolvedGrid,
   startRow: number,
   endRow: number,
   firstCol: number,
   lastCol: number,
-): number {
-  const MAX = 3;
+  merges: readonly MergeSpan[] = [],
+): HeaderAnalysis {
   const slice = (r: number): CellValue[] => {
     const row = resolved.cells[r];
     if (!row) return [];
@@ -183,46 +210,124 @@ export function detectHeaderRowCount(
   // next table down drags every signal towards noise and loses the header entirely.
   const limit = Math.min(endRow, resolved.cells.length - 1);
 
-  /** Below this, a row is data, not a label row. */
-  const MIN_HEADER = 0.5;
-
-  const scores: number[] = [];
-  for (let offset = 0; offset < MAX; offset++) {
+  const signals: HeaderSignals[] = [];
+  for (let offset = 0; offset < MAX_HEADER_ROWS; offset++) {
     const r = startRow + offset;
     if (r > limit || resolved.cells[r] === undefined) break;
     const body: CellValue[][] = [];
     for (let b = r + 1; b <= limit; b++) body.push(slice(b));
     if (body.length === 0) break;
-    scores.push(scoreHeaderRow(slice(r), body));
+    signals.push(headerSignals(slice(r), body));
   }
-  if (scores.length === 0) return 1;
+
+  // A single-row region: nothing below it, so there is nothing to infer from. Read it
+  // as data rather than as a header — a heading with no rows beneath it labels
+  // nothing, and calling it a header would leave the region with no records at all.
+  if (signals.length === 0) {
+    return {
+      chosen: { rows: 0, score: 0.5, why: 'a single row, with nothing beneath it to label' },
+      alternatives: [{ rows: 1, score: 0.5, why: 'treat the row as a heading' }],
+      ambiguous: true,
+    };
+  }
 
   let best = 0;
   // Strictly greater keeps the shallowest row on a tie, so a plain single-header
   // table is never over-read as multi-level.
-  for (let i = 1; i < scores.length; i++) if (scores[i]! > scores[best]!) best = i;
+  for (let i = 1; i < signals.length; i++) {
+    if (signals[i]!.score > signals[best]!.score) best = i;
+  }
+  const top = signals[best]!;
 
-  // No row here separates labels from data — an all-numeric block, for instance.
-  // Report zero rather than consuming a data row as a header.
-  if (scores[best]! < MIN_HEADER) return 0;
+  // ── no row separates labels from data ────────────────────────────────────
+  if (top.score < MIN_HEADER) {
+    const headerless: HeaderCandidate = {
+      rows: 0,
+      score: 1 - top.score,
+      why: 'no row looks like labels over data',
+    };
+    // The all-numeric veto is the reason the score is low, not evidence that the
+    // row is data. Offer both readings and say we are unsure.
+    if (signals[0]!.allNumeric) {
+      return {
+        chosen: headerless,
+        alternatives: [
+          { rows: 1, score: 0.5, why: 'read the first row as labels, such as years' },
+        ],
+        ambiguous: true,
+      };
+    }
+    return { chosen: headerless, alternatives: [], ambiguous: top.score > 0.35 };
+  }
 
-  // Everything above the best row is a grouping row by construction, so it is part
-  // of the header block. Then extend DOWNWARD while the next row still reads as
-  // labels rather than data.
-  //
-  // The downward extension is what a pure argmax misses. Given
-  //
-  //        | Q1      | Q2      | Q3
-  //   Region| Revenue | Revenue | Revenue
-  //
-  // the quarter row wins on distinctness precisely because the row beneath it
-  // repeats one label three times — and that repetition is the whole reason the
-  // path is needed. Scoring alone would stop at the quarter row and read the
-  // measure row as data.
+  // ── extend downward, but only on structural evidence ─────────────────────
+  const density = (r: number): number => {
+    const row = slice(r);
+    if (row.length === 0) return 0;
+    return row.filter((v) => !isBlank(v)).length / row.length;
+  };
+  const spansColumns = (r: number): boolean =>
+    merges.some((m) => m.topRow <= r && m.bottomRow >= r && m.rightCol > m.leftCol);
+
   let last = best;
-  while (last + 1 < scores.length && scores[last + 1]! >= MIN_HEADER) last++;
+  let extendedBy = '';
+  while (last + 1 < signals.length && signals[last + 1]!.score >= MIN_HEADER) {
+    const row = startRow + last;
+    const merged = spansColumns(row);
+    const sparser = density(row) < density(row + 1);
+    if (!merged && !sparser) break;
+    extendedBy = merged ? 'a heading spans several columns' : 'a grouping row sits above a denser one';
+    last++;
+  }
 
-  return last + 1;
+  const deepest = signals[last]!;
+  const rows = last + 1;
+
+  // Three ways to end up with more than one header row, and the reason spoken aloud
+  // should say which one actually happened rather than asserting the last branch.
+  const groupingAbove = best > 0;
+  const why =
+    rows === 1
+      ? deepest.discontinuity > 0
+        ? 'labels sit above values of a different kind'
+        : 'the first row reads as labels'
+      : extendedBy && groupingAbove
+        ? `headings are stacked above the row that names the values, and ${extendedBy}`
+        : groupingAbove
+          ? 'headings are stacked above the row that names the values'
+          : `${extendedBy}, over a row of labels`;
+
+  const chosen: HeaderCandidate = { rows, score: deepest.score, why };
+
+  // Where the boundary row is only weakly supported — an all-text table gives the
+  // discontinuity signal nothing to work with — offer the neighbouring readings.
+  const alternatives: HeaderCandidate[] = [];
+  if (deepest.score < CONFIDENT) {
+    if (rows > 0) {
+      alternatives.push({ rows: 0, score: 1 - deepest.score, why: 'treat every row as data' });
+    }
+    if (rows < MAX_HEADER_ROWS && signals.length > rows) {
+      alternatives.push({
+        rows: rows + 1,
+        score: signals[rows]?.score ?? 0,
+        why: 'take one more row as a second heading level',
+      });
+    }
+  }
+
+  return { chosen, alternatives, ambiguous: deepest.score < CONFIDENT };
+}
+
+/** Backwards-compatible shorthand: the chosen row count only. */
+export function detectHeaderRowCount(
+  resolved: ResolvedGrid,
+  startRow: number,
+  endRow: number,
+  firstCol: number,
+  lastCol: number,
+  merges: readonly MergeSpan[] = [],
+): number {
+  return analyseHeader(resolved, startRow, endRow, firstCol, lastCol, merges).chosen.rows;
 }
 
 /** Speakable rendering of a header path: "2026, Q2, Revenue". */

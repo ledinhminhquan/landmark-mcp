@@ -40,6 +40,7 @@ import {
   HEADLINE_WORD_LIMIT,
 } from '../voice/speak.ts';
 import type { Store } from './store.ts';
+import { materialise } from '../table/materialise.ts';
 import { EXPLAIN_UI_URI, UI_RESOURCE_KEY } from './widget.ts';
 
 const PAGE = 5;
@@ -132,6 +133,56 @@ function locate(index: LandmarkIndex, tableId: string, sheet?: string): Located 
     );
   }
   return { table, region };
+}
+
+/**
+ * Locate a region and apply any correction the person has made to how its structure
+ * is read.
+ *
+ * Every tool goes through here rather than through `locate` directly, so a spoken
+ * correction takes effect everywhere at once. Re-reading runs the same
+ * `materialise` the ingest step used, so a corrected table is built by code that is
+ * already tested rather than by a second, less-travelled path.
+ */
+async function located(
+  index: LandmarkIndex,
+  store: Store,
+  tableId: string,
+  sheet?: string,
+): Promise<(Located & { revision: number }) | ReturnType<typeof fail>> {
+  const base = guard(() => locate(index, tableId, sheet));
+  if (isFailure(base)) return base;
+  const { table, region } = base;
+
+  const override = await store.getStructure(`${table.id}/${region.id}`);
+  if (!override || override.headerRows === region.headerRows.length) {
+    return { table, region, revision: region.structure.revision };
+  }
+
+  const m = materialise(region.allRows, region.startRow, region.firstCol, override.headerRows);
+  const corrected: IndexRegion = {
+    ...region,
+    headerRows: m.headerRows,
+    firstDataRow: m.firstDataRow,
+    rowCount: m.rows.length,
+    columns: m.columns,
+    rows: m.rows,
+    labelColumn: m.labelColumn,
+    ambiguousColumns: m.ambiguousColumns,
+    headerConfidence: 1,
+    structure: {
+      chosen: {
+        headerRows: m.headerRows.length,
+        score: 1,
+        why: 'you told me where the headings stop',
+      },
+      alternatives: [],
+      ambiguous: false,
+      revision: override.revision,
+      confirmedBy: 'user',
+    },
+  };
+  return { table, region: corrected, revision: override.revision };
 }
 
 /**
@@ -268,7 +319,7 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ table_id, sheet, detail }) => {
-      const found = guard(() => locate(index, table_id, sheet));
+      const found = await located(index, store, table_id, sheet);
       if (isFailure(found)) return found;
       const { table, region } = found;
 
@@ -296,7 +347,99 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
     },
   );
 
-  // ── 3. table_query ───────────────────────────────────────────────────────
+  // ── 3. table_structure ───────────────────────────────────────────────────
+  server.registerTool(
+    'table_structure',
+    {
+      title: 'Check or correct how a table is being read',
+      description:
+        'Say how this table is currently being read — how many rows are treated as headings and ' +
+        'why — and change it when that reading is wrong. Offer this whenever a description says ' +
+        'the reading is uncertain, whenever a column is named after something that sounds like ' +
+        'data ("Alice", "2024"), or whenever someone says a row count or a total looks wrong. ' +
+        'Call it with no heading count to hear the current reading and the alternatives; call it ' +
+        'with one to change it. Changing it re-reads the table immediately and every later answer ' +
+        'uses the corrected reading.',
+      inputSchema: {
+        table_id: z.string(),
+        sheet: z.string().optional(),
+        header_rows: z
+          .number()
+          .int()
+          .min(0)
+          .max(3)
+          .optional()
+          .describe(
+            'How many rows at the top are headings. 0 means the table has none and every row is ' +
+              'data. Omit to inspect without changing anything.',
+          ),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ table_id, sheet, header_rows }) => {
+      const found = await located(index, store, table_id, sheet);
+      if (isFailure(found)) return found;
+      const { table, region } = found;
+
+      // ── inspect ──
+      if (header_rows === undefined) {
+        const s = region.structure;
+        const head =
+          s.chosen.headerRows === 0
+            ? 'I am treating every row as data.'
+            : `I am treating ${plural(s.chosen.headerRows, 'row')} as headings — ${s.chosen.why}.`;
+        const named = region.columns.filter((c) => c.path.length).map((c) => c.spoken);
+        const cols = named.length ? ` That gives the columns ${speakList(named)}.` : '';
+        const doubt = s.ambiguous
+          ? ` I am not certain: I could instead ${speakList(s.alternatives.map((a) => a.why))}.`
+          : s.confirmedBy === 'user'
+            ? ' You confirmed this.'
+            : '';
+        return ok(capWords(head + cols + doubt, 70), {
+          table_id: table.id,
+          sheet: region.sheet,
+          header_rows: s.chosen.headerRows,
+          data_rows: region.rowCount,
+          why: s.chosen.why,
+          ambiguous: s.ambiguous,
+          confirmed_by_user: s.confirmedBy === 'user',
+          revision: s.revision,
+          alternatives: s.alternatives.map((a) => ({ header_rows: a.headerRows, why: a.why })),
+          columns: region.columns.map((c) => c.spoken),
+        });
+      }
+
+      // ── correct ──
+      if (header_rows >= region.allRows.length) {
+        return fail(
+          `This table only has ${plural(region.allRows.length, 'row')} in total.`,
+          'Choose a smaller number of heading rows so some rows remain as data.',
+        );
+      }
+
+      const override = await store.putStructure(`${table.id}/${region.id}`, header_rows);
+      const m = materialise(region.allRows, region.startRow, region.firstCol, header_rows);
+      const named = m.columns.filter((c) => c.path.length).map((c) => c.spoken);
+
+      const spoken =
+        header_rows === 0
+          ? `Right — no headings. That gives ${plural(m.rows.length, 'row')} of data, and I will call the columns by position.`
+          : `Right — ${plural(header_rows, 'heading row')}. That gives ${plural(m.rows.length, 'row')} of data` +
+            (named.length ? `, with the columns ${speakList(named)}.` : '.');
+
+      return ok(capWords(spoken, 70), {
+        table_id: table.id,
+        sheet: region.sheet,
+        header_rows,
+        data_rows: m.rows.length,
+        revision: override.revision,
+        columns: m.columns.map((c) => c.spoken),
+        note: 'Answers given before this correction were computed under the previous reading.',
+      });
+    },
+  );
+
+  // ── 4. table_query ───────────────────────────────────────────────────────
   server.registerTool(
     'table_query',
     {
@@ -359,7 +502,7 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (args) => {
-      const found = guard(() => locate(index, args.table_id, args.sheet));
+      const found = await located(index, store, args.table_id, args.sheet);
       if (isFailure(found)) return found;
       const { table, region } = found;
 
@@ -389,6 +532,7 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         excluded: run.provenance.excluded,
         path: target?.path ?? [],
         spec: args,
+        structureRevision: found.revision,
       });
 
       const spoken = speakQuery(
@@ -446,17 +590,28 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         );
       }
       const cells = a.cells.slice(0, limit);
-      const spoken = speakExplain(cells, a.cellCount, a.path, a.excluded, a.sheet);
+      let spoken = speakExplain(cells, a.cellCount, a.path, a.excluded, a.sheet);
+
+      // If the reading of the table changed after this answer was given, the cells
+      // below still name where the number came from, but the columns they sit under
+      // may no longer be the ones that were spoken. Say so rather than presenting
+      // evidence from one reading as though it belonged to another.
+      const current = await located(index, store, a.tableId, a.regionId);
+      const staleRevision =
+        !isFailure(current) && current.revision !== a.structureRevision;
+      if (staleRevision) {
+        spoken +=
+          ' Note that you changed how this table is read after I gave that answer, so ask it again for a current one.';
+      }
 
       // The widget needs the surrounding region, not just the cell list — a
       // highlighted cell with no neighbours conveys nothing. Bounded so a large
       // sheet cannot turn an explanation into a payload.
       // A missing region is not worth failing the explanation over — the spoken
       // answer stands on its own and the widget is the optional half.
-      const located = guard(() => locate(index, a.tableId, a.regionId));
-      const visual = isFailure(located)
+      const visual = isFailure(current)
         ? null
-        : { grid: buildGrid(located.region, a.cells), title: located.region.title };
+        : { grid: buildGrid(current.region, a.cells), title: current.region.title };
 
       return ok(spoken, {
         sheet: a.sheet,
@@ -465,6 +620,8 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         header_path: a.path,
         excluded: a.excluded.map((e) => ({ address: e.address, reason: e.reason })),
         more_available: a.cells.length > cells.length,
+        structure_revision: a.structureRevision,
+        structure_changed_since: staleRevision,
         ...(visual ?? {}),
       });
     },
@@ -494,7 +651,7 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ table_id, sheet, columns, start_row, limit }) => {
-      const found = guard(() => locate(index, table_id, sheet));
+      const found = await located(index, store, table_id, sheet);
       if (isFailure(found)) return found;
       const { region } = found;
 
@@ -547,10 +704,13 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (args) => {
-      const left = guard(() => locate(index, args.table_id, args.sheet));
+      const left = await located(index, store, args.table_id, args.sheet);
       if (isFailure(left)) return left;
-      const right = guard(() =>
-        locate(index, args.right_table_id ?? args.table_id, args.right_sheet ?? args.sheet),
+      const right = await located(
+        index,
+        store,
+        args.right_table_id ?? args.table_id,
+        args.right_sheet ?? args.sheet,
       );
       if (isFailure(right)) return right;
 
@@ -589,6 +749,7 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         excluded: [...a.provenance.excluded, ...b.provenance.excluded],
         path: lc.path,
         spec: args,
+        structureRevision: left.revision,
       });
 
       const spoken = capWords(
@@ -629,7 +790,7 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
       annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ name, table_id, sheet, row, note }) => {
-      const found = guard(() => locate(index, table_id, sheet));
+      const found = await located(index, store, table_id, sheet);
       if (isFailure(found)) return found;
       const { table, region } = found;
 
@@ -683,7 +844,7 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         );
       }
 
-      const found = guard(() => locate(index, mark.tableId, mark.regionId));
+      const found = await located(index, store, mark.tableId, mark.regionId);
       if (isFailure(found)) return found;
       const { table, region } = found;
 

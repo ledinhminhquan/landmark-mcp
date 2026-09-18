@@ -31,6 +31,12 @@ export interface StoredAnswer {
   readonly path: readonly string[];
   /** Enough of the query to re-run a continuation. */
   readonly spec: unknown;
+  /**
+   * Structure revision this answer was computed under. If the person later corrects
+   * how the table is read, explaining this answer must say so rather than quietly
+   * presenting evidence from a different reading of the file.
+   */
+  readonly structureRevision: number;
 }
 
 export interface Bookmark {
@@ -41,12 +47,29 @@ export interface Bookmark {
   readonly savedAt: string;
 }
 
+/**
+ * A person's correction to how a region's structure is read.
+ *
+ * Inference gets tables wrong, and a tool that cannot be corrected out loud leaves a
+ * blind user with no recourse at all — they cannot open the file and look. The
+ * revision is what keeps earlier answers honest: every answer records the revision it
+ * was computed under, so a correction cannot silently rewrite the evidence for
+ * something already spoken.
+ */
+export interface StructureOverride {
+  readonly headerRows: number;
+  readonly revision: number;
+}
+
 export interface Store {
   putAnswer(answer: StoredAnswer): Promise<string>;
   getAnswer(id: string): Promise<StoredAnswer | null>;
   putBookmark(name: string, mark: Bookmark): Promise<void>;
   getBookmark(name: string): Promise<Bookmark | null>;
   listBookmarks(): Promise<readonly { name: string; mark: Bookmark }[]>;
+  getStructure(regionKey: string): Promise<StructureOverride | null>;
+  /** Records the correction and returns the new revision. */
+  putStructure(regionKey: string, headerRows: number): Promise<StructureOverride>;
 }
 
 /**
@@ -60,6 +83,7 @@ export interface Store {
 export class MemoryStore implements Store {
   #answers = new Map<string, StoredAnswer>();
   #bookmarks = new Map<string, Bookmark>();
+  #structures = new Map<string, StructureOverride>();
   #seq = 0;
   readonly #maxAnswers: number;
   readonly #now: () => string;
@@ -95,6 +119,17 @@ export class MemoryStore implements Store {
 
   async listBookmarks(): Promise<readonly { name: string; mark: Bookmark }[]> {
     return [...this.#bookmarks.entries()].map(([name, mark]) => ({ name, mark }));
+  }
+
+  async getStructure(regionKey: string): Promise<StructureOverride | null> {
+    return this.#structures.get(regionKey) ?? null;
+  }
+
+  async putStructure(regionKey: string, headerRows: number): Promise<StructureOverride> {
+    const previous = this.#structures.get(regionKey);
+    const next: StructureOverride = { headerRows, revision: (previous?.revision ?? 1) + 1 };
+    this.#structures.set(regionKey, next);
+    return next;
   }
 
   /** Exposed for the tools that need a timestamp without importing a clock. */
@@ -142,6 +177,19 @@ export class KVStore implements Store {
 
   async getBookmark(name: string): Promise<Bookmark | null> {
     return ((await this.#kv.get(`bm:${name.trim().toLowerCase()}`, 'json')) as Bookmark) ?? null;
+  }
+
+  async getStructure(regionKey: string): Promise<StructureOverride | null> {
+    return ((await this.#kv.get(this.#sessionPrefix + 'st:' + regionKey, 'json')) as StructureOverride) ?? null;
+  }
+
+  async putStructure(regionKey: string, headerRows: number): Promise<StructureOverride> {
+    const previous = await this.getStructure(regionKey);
+    const next: StructureOverride = { headerRows, revision: (previous?.revision ?? 1) + 1 };
+    await this.#kv.put(this.#sessionPrefix + 'st:' + regionKey, JSON.stringify(next), {
+      expirationTtl: 86400,
+    });
+    return next;
   }
 
   async listBookmarks(): Promise<readonly { name: string; mark: Bookmark }[]> {

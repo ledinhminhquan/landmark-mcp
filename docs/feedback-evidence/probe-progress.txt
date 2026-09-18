@@ -1,0 +1,8 @@
+pid=40004
+schema rawShape
+schema zodObject
+schema plainJsonSchema
+stream {"json":false,"closeEarly":true}
+stream {"json":false,"closeEarly":false}
+stream {"json":true,"closeEarly":true}
+merge and node

@@ -1,0 +1,138 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "exceljs": {
+      "name": "exceljs",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "uuid"
+      ],
+      "effects": [],
+      "range": ">=3.5.0",
+      "nodes": [
+        "node_modules/exceljs"
+      ],
+      "fixAvailable": {
+        "name": "exceljs",
+        "version": "3.4.0",
+        "isSemVerMajor": true
+      }
+    },
+    "miniflare": {
+      "name": "miniflare",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "sharp"
+      ],
+      "effects": [
+        "wrangler"
+      ],
+      "range": "<=0.0.0-fec45ed61 || 4.20250508.3 - 5.20260908.0-alpha",
+      "nodes": [
+        "node_modules/miniflare"
+      ],
+      "fixAvailable": true
+    },
+    "sharp": {
+      "name": "sharp",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1193725,
+          "name": "sharp",
+          "dependency": "sharp",
+          "title": "sharp: Vulnerabilities in libheif: GHSA-g89c-p67h-r497 and GHSA-2jg2-4ch7-h545",
+          "url": "https://github.com/advisories/GHSA-rgj7-g3m4-5g8c",
+          "severity": "high",
+          "cwe": [
+            "CWE-122"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<0.35.4"
+        }
+      ],
+      "effects": [
+        "miniflare"
+      ],
+      "range": "<0.35.4",
+      "nodes": [
+        "node_modules/sharp"
+      ],
+      "fixAvailable": true
+    },
+    "uuid": {
+      "name": "uuid",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1119441,
+          "name": "uuid",
+          "dependency": "uuid",
+          "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+          "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-787",
+            "CWE-1285"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+          },
+          "range": "<11.1.1"
+        }
+      ],
+      "effects": [
+        "exceljs"
+      ],
+      "range": "<11.1.1",
+      "nodes": [
+        "node_modules/uuid"
+      ],
+      "fixAvailable": {
+        "name": "exceljs",
+        "version": "3.4.0",
+        "isSemVerMajor": true
+      }
+    },
+    "wrangler": {
+      "name": "wrangler",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "miniflare"
+      ],
+      "effects": [],
+      "range": "<=0.0.0-7ae5dd357 || 4.16.0 - 4.130.0",
+      "nodes": [
+        "node_modules/wrangler"
+      ],
+      "fixAvailable": true
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 2,
+      "high": 3,
+      "critical": 0,
+      "total": 5
+    },
+    "dependencies": {
+      "prod": 191,
+      "dev": 95,
+      "optional": 60,
+      "peer": 0,
+      "peerOptional": 0,
+      "total": 285
+    }
+  }
+}

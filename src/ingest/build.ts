@@ -2,22 +2,19 @@
  * Grid → index. The offline half of the system, where all the inference happens.
  */
 
-import {
-  buildHeaderPaths,
-  detectHeaderRowCount,
-  resolveMerges,
-} from '../table/header.ts';
-import { detectRegions, profileColumn, type Grid } from '../table/infer.ts';
-import { a1, columnLetter, isBlank, toSpokenName, type CellValue } from '../table/model.ts';
+import { analyseHeader, resolveMerges } from '../table/header.ts';
+import { materialise } from '../table/materialise.ts';
+import { detectRegions, type Grid } from '../table/infer.ts';
+import { a1, isBlank, type CellValue } from '../table/model.ts';
 import {
   INDEX_VERSION,
   slugify,
   titleize,
-  type IndexColumn,
   type IndexInherited,
   type IndexRegion,
   type IndexTable,
   type LandmarkIndex,
+  type StructureReading,
 } from '../indexfmt.ts';
 import type { ReadResult, ReadSheet } from './read.ts';
 
@@ -28,21 +25,6 @@ function toJson(v: CellValue): Json {
   return v;
 }
 
-/**
- * Which column identifies a row when speaking it?
- *
- * "Revenue for North" needs "North" to come from somewhere. Prefer a leftmost column
- * that is text-like and close to unique — that is what an identifier looks like. A
- * category column is the fallback: less precise, but "Revenue for the South region"
- * still beats "Revenue for row 14".
- */
-function pickLabelColumn(columns: readonly IndexColumn[], rowCount: number): number | null {
-  const usable = columns.filter((c) => c.kind === 'text' || c.kind === 'category');
-  if (usable.length === 0) return null;
-  const identifier = usable.find((c) => rowCount > 0 && c.distinct / rowCount >= 0.8);
-  return (identifier ?? usable[0])!.i;
-}
-
 function buildRegionIndex(
   sheet: ReadSheet,
   raw: { startRow: number; endRow: number; firstCol: number; lastCol: number },
@@ -50,37 +32,23 @@ function buildRegionIndex(
   titleAbove: string | null,
 ): IndexRegion {
   const resolved = resolveMerges(sheet.grid as Grid, sheet.merges);
-
-  const headerRowCount = detectHeaderRowCount(
+  const analysis = analyseHeader(
     resolved,
     raw.startRow,
     raw.endRow,
     raw.firstCol,
     raw.lastCol,
-  );
-  const headerRows = Array.from({ length: headerRowCount }, (_, i) => raw.startRow + i).filter(
-    (r) => r <= raw.endRow,
+    sheet.merges,
   );
 
-  // Header detection can legitimately conclude there is no header (all-numeric grid).
-  // We keep the rows it consumed only if the data below is non-empty.
-  const firstDataRow = raw.startRow + headerRows.length;
-  const hasData = firstDataRow <= raw.endRow;
-  const effectiveHeaderRows = hasData ? headerRows : [];
-  const dataStart = hasData ? firstDataRow : raw.startRow;
-
-  const { paths, ambiguous } = buildHeaderPaths(
-    resolved,
-    effectiveHeaderRows,
-    raw.firstCol,
-    raw.lastCol,
-  );
-
+  // Every row of the region, header included, plus a record of which cells only have
+  // a value because a merge covers them. Keeping the header rows here is what lets
+  // the reading be corrected later without the source file.
   const width = raw.lastCol - raw.firstCol + 1;
-  const rows: Json[][] = [];
+  const allRows: Json[][] = [];
   const inherited: IndexInherited[] = [];
 
-  for (let r = dataStart; r <= raw.endRow; r++) {
+  for (let r = raw.startRow; r <= raw.endRow; r++) {
     const out: Json[] = [];
     for (let i = 0; i < width; i++) {
       const c = raw.firstCol + i;
@@ -92,66 +60,44 @@ function buildRegionIndex(
         if (from) inherited.push({ at, from });
       }
     }
-    rows.push(out);
+    allRows.push(out);
   }
 
-  const columns: IndexColumn[] = paths.map((path, i) => {
-    const values = rows.map((row) => (row[i] ?? null) as CellValue);
-    const label = path[path.length - 1] ?? '';
-    const p = profileColumn(values, label, i, raw.firstCol + i);
-    const spokenLeaf = toSpokenName(label, i);
-    // Speak the full path when it disambiguates; the leaf alone when it does not.
-    const spoken = path.length > 1 ? path.join(', ') : spokenLeaf;
+  const m = materialise(allRows, raw.startRow, raw.firstCol, analysis.chosen.rows);
 
-    const base: IndexColumn = {
-      i,
-      path,
-      spoken,
-      col: columnLetter(raw.firstCol + i),
-      kind: p.kind,
-      nonEmpty: p.nonEmpty,
-      empty: p.empty,
-      distinct: p.distinct,
-    };
-    return {
-      ...base,
-      ...(p.categories ? { categories: p.categories } : {}),
-      ...(p.numeric
-        ? {
-            min: p.numeric.min,
-            max: p.numeric.max,
-            sum: p.numeric.sum,
-            mean: p.numeric.mean,
-            nonNumeric: p.numeric.nonNumeric,
-          }
-        : {}),
-    };
+  const reading = (c: { rows: number; score: number; why: string }): StructureReading => ({
+    headerRows: c.rows,
+    score: Math.round(c.score * 100) / 100,
+    why: c.why,
   });
 
-  // Reuse the primary header row's score as the confidence we report aloud.
-  const primary = effectiveHeaderRows[effectiveHeaderRows.length - 1];
-  const confidence =
-    primary === undefined
-      ? 0
-      : Math.min(
-          1,
-          columns.filter((c) => c.path.length > 0).length / Math.max(1, columns.length),
-        );
+  // Report the reading that was actually applied, not the one that was proposed.
+  // `materialise` clamps a header block that would leave no data rows, and a
+  // structure record that disagreed with its own columns would be worse than none:
+  // it is exactly the kind of quiet inconsistency this whole change exists to remove.
+  const chosen = reading({ ...analysis.chosen, rows: m.headerRows.length });
+  const alternatives = analysis.alternatives
+    .map(reading)
+    .filter((a) => a.headerRows !== chosen.headerRows);
 
   return {
     id,
     sheet: sheet.name,
     title: titleAbove,
-    headerRows: effectiveHeaderRows,
-    headerConfidence: confidence,
-    firstDataRow: dataStart,
+    headerRows: m.headerRows,
+    // Same number as structure.chosen.score, kept so older readers do not break.
+    headerConfidence: chosen.score,
+    structure: { chosen, alternatives, ambiguous: analysis.ambiguous, revision: 1 },
+    startRow: raw.startRow,
+    allRows,
+    firstDataRow: m.firstDataRow,
     firstCol: raw.firstCol,
-    rowCount: rows.length,
-    columns,
-    rows,
+    rowCount: m.rows.length,
+    columns: m.columns,
+    rows: m.rows,
     inherited,
-    labelColumn: pickLabelColumn(columns, rows.length),
-    ambiguousColumns: ambiguous,
+    labelColumn: m.labelColumn,
+    ambiguousColumns: m.ambiguousColumns,
   };
 }
 

@@ -1,0 +1,108 @@
+{
+  "checkedAt": "2026-09-13T05:39:40.997Z",
+  "node": "v23.11.0",
+  "scope": "A7 controlled probes, not a reconstruction of original build console output; no Alexa/cloud/microphone calls",
+  "versions": {
+    "sdk": "1.30.0",
+    "zod": "3.25.76",
+    "exceljs": "4.4.0",
+    "typescript": "5.7.2"
+  },
+  "protocol": {
+    "LATEST_PROTOCOL_VERSION": "2025-11-25",
+    "DEFAULT_NEGOTIATED_PROTOCOL_VERSION": "2025-03-26"
+  },
+  "schemas": {
+    "rawShape": {
+      "callStatus": 200,
+      "call": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"value\":\"ok\"}"
+            }
+          ]
+        },
+        "jsonrpc": "2.0",
+        "id": 1
+      }
+    },
+    "zodObject": {
+      "callStatus": 200,
+      "call": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"value\":\"ok\"}"
+            }
+          ]
+        },
+        "jsonrpc": "2.0",
+        "id": 1
+      }
+    },
+    "plainJsonSchema": {
+      "error": "Error: inputSchema must be a Zod schema or raw shape, received an unrecognized object"
+    }
+  },
+  "streamLifetime": [
+    {
+      "json": false,
+      "closeEarly": true,
+      "status": 200,
+      "contentType": "text/event-stream",
+      "body": ""
+    },
+    {
+      "json": false,
+      "closeEarly": false,
+      "status": 200,
+      "contentType": "text/event-stream",
+      "body": "event: message\ndata: {\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"ok\"}]},\"jsonrpc\":\"2.0\",\"id\":1}\n\n"
+    },
+    {
+      "json": true,
+      "closeEarly": true,
+      "status": 200,
+      "contentType": "application/json",
+      "body": "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"ok\"}]},\"jsonrpc\":\"2.0\",\"id\":1}"
+    }
+  ],
+  "merges": {
+    "modelMerges": [
+      "A1:A3"
+    ],
+    "isArray": true,
+    "cells": [
+      {
+        "address": "A1",
+        "value": "Engineering",
+        "isMerged": true,
+        "master": "A1"
+      },
+      {
+        "address": "A2",
+        "value": "Engineering",
+        "isMerged": true,
+        "master": "A1"
+      },
+      {
+        "address": "A3",
+        "value": "Engineering",
+        "isMerged": true,
+        "master": "A1"
+      }
+    ]
+  },
+  "parameterProperty": {
+    "exit": 1,
+    "stderr": "node:internal/modules/typescript:67\r\n        throw new ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX(error.message);\r\n        ^\r\n\r\nSyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]:   x TypeScript parameter property is not supported in strip-only mode\r\n   ,-[1:1]\r\n 1 | class Problem { constructor(readonly nextStep: string) {} }\r\n   :                                      ^^^^^^^^^^^^^^^^\r\n 2 | new Problem(\"retry\");\r\n   `----\r\n\r\n    at parseTypeScript (node:internal/modules/typescript:67:15)\r\n    at processTypeScriptCode (node:internal/modules/typescript:129:42)\r\n    at stripTypeScriptModuleTypes (node:internal/modules/typescript:196:22)\r\n    at Module._compile (node:internal/modules/cjs/loader:1686:15)\r\n    at Object.loadTS [as .ts] (node:internal/modules/cjs/loader:1826:10)\r\n    at Module.load (node:internal/modules/cjs/loader:1469:32)\r\n    at Function._load (node:internal/modules/cjs/loader:1286:12)\r\n    at TracingChannel.traceSync (node:diagnostics_channel:322:14)\r\n    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)\r\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5) {\r\n  code: 'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX'\r\n}\r\n\r\nNode.js v23.11.0\r\n"
+  },
+  "erasableFlag": {
+    "exit": 1,
+    "stdout": "error TS5023: Unknown compiler option '--erasableSyntaxOnly'.\r\n",
+    "stderr": ""
+  }
+}

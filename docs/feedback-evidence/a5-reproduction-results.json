@@ -1,0 +1,429 @@
+{
+  "checkedAt": "2026-09-12T15:36:22.119Z",
+  "node": "v23.11.0",
+  "scope": "Actual unmodified modules; direct Web Request handler calls and browser routing functions. No cloud/browser speech test. KV uses a deterministic in-memory backing double.",
+  "results": {
+    "demoBudgetSelection": {
+      "currentBefore": "01-flat",
+      "plan": {
+        "tool": "table_describe",
+        "args": {
+          "table_id": "01-flat",
+          "detail": "brief"
+        }
+      },
+      "currentAfter": "01-flat"
+    },
+    "demoEngineering": {
+      "utterance": "total for engineering",
+      "actualPlan": {
+        "speak": "Which column? I have Department, Line item, Amount."
+      },
+      "workingExplicitCallResult": 560000
+    },
+    "yearMatchesFilename": {
+      "utterance": "total 2025 Q2 revenue",
+      "actualTable": "02-stacked-header",
+      "intendedTable": "03-merged-header",
+      "plan": {
+        "speak": "Open a table first — say, what do I have."
+      }
+    },
+    "mergedColumnRouting": {
+      "contextNote": "Only table-name matching disabled to isolate column matching",
+      "wrongPlan": {
+        "tool": "table_query",
+        "args": {
+          "table_id": "03-merged-header",
+          "aggregate": "sum",
+          "aggregate_column": "2026, Q1, Revenue"
+        }
+      },
+      "actual": 2100,
+      "intended": 1850,
+      "comparisonPlan": {
+        "tool": "table_describe",
+        "args": {
+          "table_id": "03-merged-header",
+          "detail": "brief"
+        }
+      }
+    },
+    "allTextHeader": {
+      "expectedRows": 3,
+      "actualRows": 1,
+      "headerRows": [
+        0,
+        1,
+        2
+      ],
+      "headerConfidence": 1,
+      "columns": [
+        "Name, Alice, Bob",
+        "City, Paris, London"
+      ],
+      "data": [
+        [
+          "Cara",
+          "Rome"
+        ]
+      ]
+    },
+    "groupedCount": {
+      "input": {
+        "aggregate": "count",
+        "groupBy": "Region"
+      },
+      "result": 5,
+      "groups": [],
+      "expectedGroups": {
+        "North": 2,
+        "South": 2,
+        "East": 1
+      }
+    },
+    "countExplain": {
+      "count": {
+        "status": 200,
+        "spoken": "5 rows match.",
+        "answer_id": "a1",
+        "result": 5,
+        "matched_rows": 5,
+        "rows": [],
+        "groups": [],
+        "provenance": {
+          "sheet": "Sales",
+          "cell_count": 5,
+          "excluded_count": 0
+        },
+        "more_available": false,
+        "cursor": null
+      },
+      "explain": {
+        "status": 200,
+        "spoken": "That came from one cell on Sales. I am naming 0 of 5.",
+        "sheet": "Sales",
+        "cells": [],
+        "total_cells": 5,
+        "header_path": [],
+        "excluded": [],
+        "more_available": false,
+        "grid": {
+          "columns": [
+            {
+              "name": "Region",
+              "letter": "A"
+            },
+            {
+              "name": "Rep",
+              "letter": "B"
+            },
+            {
+              "name": "Revenue",
+              "letter": "C"
+            },
+            {
+              "name": "Closed",
+              "letter": "D"
+            }
+          ],
+          "rows": [
+            {
+              "number": 2,
+              "label": "Anh",
+              "cells": [
+                {
+                  "address": "A2",
+                  "value": "North"
+                },
+                {
+                  "address": "B2",
+                  "value": "Anh"
+                },
+                {
+                  "address": "C2",
+                  "value": 12400
+                },
+                {
+                  "address": "D2",
+                  "value": "2026-07-04T00:00:00.000Z"
+                }
+              ]
+            },
+            {
+              "number": 3,
+              "label": "Bảo",
+              "cells": [
+                {
+                  "address": "A3",
+                  "value": "North"
+                },
+                {
+                  "address": "B3",
+                  "value": "Bảo"
+                },
+                {
+                  "address": "C3",
+                  "value": 8150
+                },
+                {
+                  "address": "D3",
+                  "value": "2026-07-19T00:00:00.000Z"
+                }
+              ]
+            },
+            {
+              "number": 4,
+              "label": "Chi",
+              "cells": [
+                {
+                  "address": "A4",
+                  "value": "South"
+                },
+                {
+                  "address": "B4",
+                  "value": "Chi"
+                },
+                {
+                  "address": "C4",
+                  "value": 21000
+                },
+                {
+                  "address": "D4",
+                  "value": "2026-08-02T00:00:00.000Z"
+                }
+              ]
+            },
+            {
+              "number": 5,
+              "label": "Dũng",
+              "cells": [
+                {
+                  "address": "A5",
+                  "value": "South"
+                },
+                {
+                  "address": "B5",
+                  "value": "Dũng"
+                },
+                {
+                  "address": "C5",
+                  "value": 3900
+                },
+                {
+                  "address": "D5",
+                  "value": "2026-08-27T00:00:00.000Z"
+                }
+              ]
+            },
+            {
+              "number": 6,
+              "label": "An",
+              "cells": [
+                {
+                  "address": "A6",
+                  "value": "East"
+                },
+                {
+                  "address": "B6",
+                  "value": "An"
+                },
+                {
+                  "address": "C6",
+                  "value": 15600
+                },
+                {
+                  "address": "D6",
+                  "value": "2026-09-01T00:00:00.000Z"
+                }
+              ]
+            }
+          ]
+        },
+        "title": null
+      }
+    },
+    "crossSheetProvenance": {
+      "comparison": {
+        "status": 200,
+        "spoken": "Revenue is 61 thousand more than Revenue: 61.1 thousand against 5.",
+        "answer_id": "a1",
+        "left": {
+          "name": "Revenue",
+          "value": 61050
+        },
+        "right": {
+          "name": "Revenue",
+          "value": 5
+        },
+        "difference": 61045,
+        "percent_difference": 1220900
+      },
+      "explanation": {
+        "spoken": "That came from C2 through C6 on Left. Each one is Revenue. I am naming 5 of 10.",
+        "sheet": "Left",
+        "cells": [
+          "C2",
+          "C3",
+          "C4",
+          "C5",
+          "C6"
+        ],
+        "total_cells": 10,
+        "displayedSheetRows": [
+          {
+            "number": 2,
+            "label": "Anh",
+            "cells": [
+              {
+                "address": "A2",
+                "value": "North"
+              },
+              {
+                "address": "B2",
+                "value": "Anh"
+              },
+              {
+                "address": "C2",
+                "value": 12400
+              },
+              {
+                "address": "D2",
+                "value": "2026-07-04T00:00:00.000Z"
+              }
+            ]
+          },
+          {
+            "number": 3,
+            "label": "Bảo",
+            "cells": [
+              {
+                "address": "A3",
+                "value": "North"
+              },
+              {
+                "address": "B3",
+                "value": "Bảo"
+              },
+              {
+                "address": "C3",
+                "value": 8150
+              },
+              {
+                "address": "D3",
+                "value": "2026-07-19T00:00:00.000Z"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "kvCollision": {
+      "firstId": "a1",
+      "secondId": "a1",
+      "retrievedByFirst": {
+        "tableId": "demo",
+        "regionId": "demo.t1",
+        "sheet": "Overwritten",
+        "cells": [
+          "A1"
+        ],
+        "cellCount": 1,
+        "excluded": [],
+        "path": [
+          "Amount"
+        ],
+        "spec": {}
+      }
+    },
+    "sharedBookmarks": {
+      "crossUserRead": {
+        "status": 200,
+        "spoken": "Back in FY2026 Departmental Budget, row 2 of 5. You noted: Account A note.",
+        "name": "my place",
+        "table_id": "04-title-and-vmerge",
+        "sheet": "Budget",
+        "row": 2,
+        "note": "Account A note",
+        "row_spoken": "Tooling: Department Engineering and Amount 62 thousand"
+      },
+      "user1AfterUser2Overwrite": {
+        "status": 200,
+        "spoken": "Back in 03 merged header, row 1 of 2.",
+        "name": "my place",
+        "table_id": "03-merged-header",
+        "sheet": "Compare",
+        "row": 1,
+        "note": null,
+        "row_spoken": "North: 2026, Q1, Revenue 1200, 2026, Q2, Revenue 1400, 2025, Q1, Revenue 1100 and 2025, Q2, Revenue 1000"
+      }
+    },
+    "restartPersistence": {
+      "status": 200,
+      "isError": true,
+      "spoken": "Nothing is saved under \"survive restart\". Nothing is saved yet.",
+      "error": "Nothing is saved under \"survive restart\".",
+      "next_step": "Nothing is saved yet."
+    },
+    "invalidOrigin": {
+      "origin": "https://untrusted.invalid",
+      "expectedStatus": 403,
+      "actualStatus": 200
+    },
+    "rowPagination": {
+      "morePlan": {
+        "tool": "table_read_rows",
+        "args": {
+          "table_id": "01-flat",
+          "start_row": 1,
+          "limit": 2,
+          "cursor": "3"
+        }
+      },
+      "actualStart": 1,
+      "expectedStart": 3,
+      "rows": [
+        "Anh: Region North, Revenue 12.4 thousand and Closed July 4, 2026",
+        "Bảo: Region North, Revenue 8150 and Closed July 19, 2026"
+      ]
+    },
+    "bookmarkRouting": {
+      "lastReadStart": 3,
+      "savePlan": {
+        "tool": "table_bookmark",
+        "args": {
+          "name": "my place",
+          "table_id": "01-flat",
+          "row": 1
+        }
+      },
+      "savedPlace": {
+        "status": 200,
+        "spoken": "Saved \"my place\" at row 1 of 01 flat.",
+        "name": "my place",
+        "table_id": "01-flat",
+        "row": 1
+      },
+      "resumePlan": {
+        "tool": "table_resume",
+        "args": {}
+      },
+      "resumedPlace": {
+        "status": 200,
+        "spoken": "You have my place.",
+        "bookmarks": [
+          {
+            "name": "my place",
+            "table_id": "01-flat",
+            "row": 1
+          }
+        ]
+      }
+    },
+    "localeNumber": {
+      "input": "1.234,56",
+      "actual": 1.23456,
+      "expectedIfCommaDecimal": 1234.56
+    }
+  }
+}

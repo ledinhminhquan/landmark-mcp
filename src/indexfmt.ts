@@ -17,7 +17,7 @@
  * loud mismatch is better than a silent misread.
  */
 
-export const INDEX_VERSION = 1 as const;
+export const INDEX_VERSION = 2 as const;
 
 /** Inferred semantic type. Mirrors ColumnKind in table/model.ts. */
 export type IndexColumnKind =
@@ -69,6 +69,42 @@ export interface IndexInherited {
   readonly from: string;
 }
 
+/** One way of reading where a region's header stops. */
+export interface StructureReading {
+  /** Number of header rows. 0 means the region has no header. */
+  readonly headerRows: number;
+  /** Evidence for this reading, 0..1. */
+  readonly score: number;
+  /** One speakable clause explaining the evidence. */
+  readonly why: string;
+}
+
+/**
+ * How the region's structure was decided, and whether anyone should trust it yet.
+ *
+ * The previous format carried a single `headerConfidence` computed as the share of
+ * columns that ended up with a heading path. That number could only go up when the
+ * inference consumed more rows, so the reading that destroyed the most data reported
+ * the most confidence. It is replaced here by the evidence for the chosen reading,
+ * the readings that were rejected, and an explicit flag for "ask before relying on
+ * this".
+ */
+export interface RegionStructure {
+  readonly chosen: StructureReading;
+  /** Other readings worth offering aloud. May be empty. */
+  readonly alternatives: readonly StructureReading[];
+  /** True when the evidence does not settle it and the user should be asked. */
+  readonly ambiguous: boolean;
+  /**
+   * Bumped whenever a person corrects the reading. Every answer records the revision
+   * it was computed under, so a later correction cannot silently rewrite the
+   * evidence for something already spoken.
+   */
+  readonly revision: number;
+  /** Set when a person chose this reading rather than the inference. */
+  readonly confirmedBy?: 'user';
+}
+
 export interface IndexRegion {
   /** Stable id used in every tool call: "sales.t1". */
   readonly id: string;
@@ -77,8 +113,23 @@ export interface IndexRegion {
   readonly title: string | null;
   /** Absolute sheet row indices consumed as header, in order. Empty if headerless. */
   readonly headerRows: readonly number[];
-  /** 0..1. Surfaced honestly in speech when low. */
+  /**
+   * Kept for compatibility; prefer `structure.chosen.score`, which means the same
+   * thing and cannot be inflated by consuming more rows.
+   */
   readonly headerConfidence: number;
+  readonly structure: RegionStructure;
+  /** Absolute sheet row index of the region's first row, header included. */
+  readonly startRow: number;
+  /**
+   * Every row of the region, merge-resolved, with the header rows still attached.
+   *
+   * This is what makes a spoken correction possible: the Worker has no source file,
+   * so a region stored with its headers already stripped could never be re-read. The
+   * duplication against `rows` is a few kilobytes and is the price of being wrong
+   * recoverably.
+   */
+  readonly allRows: readonly (readonly (string | number | boolean | null)[])[];
   readonly firstDataRow: number;
   readonly firstCol: number;
   readonly rowCount: number;
