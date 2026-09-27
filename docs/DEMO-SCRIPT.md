@@ -132,7 +132,7 @@ accessible", "works with any spreadsheet", "first", or a speed comparison.
 
 ## Before recording
 
-From the repository root (Node 22.6 or later; this was checked on Node 23.11):
+From the repository root (Node 22.7 or later; this was checked on Node 23.11):
 
 ```bash
 npm ci

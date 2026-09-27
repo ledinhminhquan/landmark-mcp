@@ -246,9 +246,11 @@ and it was wrong in the direction that flattered us.
 
 ## Run it
 
-Needs Node.js 22.6 or later (the first release with `--experimental-strip-types`,
-which every script uses) and npm. Built and tested on Node 23.11 on Windows 11. These
-commands are the same in bash and PowerShell:
+Needs Node.js 22.7 or later and npm. Every script runs the TypeScript directly with
+`--experimental-strip-types`; 22.6, the first release to have it, cannot parse this
+code. Built on Node 23.11 on Windows 11, and tested on every push on Linux, macOS and
+Windows with Node 22 and 24, plus 22.7 on Linux. These commands are the same in bash and
+PowerShell:
 
 ```
 npm install
@@ -377,7 +379,9 @@ npm run demo        # prints what the server says to a scripted conversation
 ```
 
 `test/demo.test.ts` pins the filmed demo conversation word for word, and
-`test/judge-questions.test.ts` pins questions a judge might make up. The suite also
+`test/judge-questions.test.ts` pins questions a judge might make up. GitHub Actions
+(`.github/workflows/test.yml`) runs the typecheck, the suite and the build on Linux,
+macOS and Windows with Node 22 and 24, and on Node 22.7, the oldest supported. The suite also
 passes with the process time zone set to America/Los_Angeles, Pacific/Kiritimati and
 Asia/Ho_Chi_Minh. In Git Bash on the Windows machine those runs were made on, a `TZ`
 set on the command line did not reach Node (in PowerShell it did), so the runs used a

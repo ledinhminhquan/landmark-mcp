@@ -43,7 +43,7 @@
 > - **"The edge bundle contains the MCP SDK and Zod and nothing else" (§4).** It also contains
 >   the SDK's own dependencies. ExcelJS and PapaParse are indeed absent. A dry-run build of
 >   the current code is about 970 KiB (195 KiB gzipped).
-> - **Node 24 LTS (§4, §9).** Not adopted. The package requires Node 22.6 or later; development
+> - **Node 24 LTS (§4, §9).** Not adopted. The package requires Node 22.7 or later; development
 >   and tests ran on Node 23.11.
 > - **The MCP App widget through `@modelcontextprotocol/ext-apps` 1.7.5 (§6).** That package was
 >   not installed. The widget is written against the core SDK's `_meta` support and served as a

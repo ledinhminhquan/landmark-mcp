@@ -358,8 +358,8 @@ Node's own documentation already recommends TypeScript 5.8 or later with that op
 [results](feedback-evidence/legacy-probe-results.json).
 **Severity rating.** Low.
 **Workaround used.** The code avoids parameter properties (for example `QueryError.nextStep` is a
-declared field assigned in the constructor), and `package.json` requires Node 22.6 or later, the
-first release with type stripping. TypeScript is still 5.7.2.
+declared field assigned in the constructor), and `package.json` requires Node 22.7 or later (22.6.0,
+the first release with type stripping, cannot parse a typed private field; checked in CI). TypeScript is still 5.7.2.
 **Actionable suggestion.** Upgrade to TypeScript 5.8 or later and turn on
 `erasableSyntaxOnly`.
 

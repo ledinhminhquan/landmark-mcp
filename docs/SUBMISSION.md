@@ -161,7 +161,7 @@ on it first and check it says `"state":"durable"`, and keep it running until
 *Paste this if the form has a testing-instructions box.*
 
 ````markdown
-No account or credentials are needed. Needs Node.js 22.6 or later and npm; these commands are the same in bash and PowerShell:
+No account or credentials are needed. Needs Node.js 22.7 or later and npm; these commands are the same in bash and PowerShell:
 
     git clone https://github.com/ledinhminhquan/landmark-mcp
     cd landmark-mcp
@@ -298,7 +298,7 @@ No Amazon or AWS service is called at runtime. The Alexa+ toolkit, CLI, Local In
 **9. Node.js 23.11 and TypeScript 5.7.2**
 - *What I used it for:* Node runs the TypeScript directly with type stripping for the local server, the ingest command and the test suite (node --test); tsc does the type check and the build for npm start.
 - *What worked well:* no build step for development or tests. All 439 tests pass, the strict typecheck is clean, and the suite also passes under other time zones.
-- *What needs work:* type stripping rejects some syntax that TypeScript 5.7.2 accepts and cannot flag, because --erasableSyntaxOnly arrived in TypeScript 5.8; Node's documentation says so, and the fix is on my side. Every run prints an ExperimentalWarning for type stripping. package.json requires Node 22.6 or later, but only Node 23.11 was actually run.
+- *What needs work:* type stripping rejects some syntax that TypeScript 5.7.2 accepts and cannot flag, because --erasableSyntaxOnly arrived in TypeScript 5.8; Node's documentation says so, and the fix is on my side. Every run prints an ExperimentalWarning for type stripping. Node 22.6.0, the first release with type stripping, fails to parse a typed private class field (`#answers = new Map<…>()`) with "SyntaxError: Unexpected identifier '#answers'"; 22.7.0 onwards works, so package.json requires 22.7 or later. CI checked ten Node 22 releases on 27 September: 22.6.0 failed, and 22.7.0 through 22.23.2 passed.
 - *How onboarding felt:* not timed; both were already installed.
 - *Would I build with it again:* Yes, with TypeScript 5.8 or later.
 

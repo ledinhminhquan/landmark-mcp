@@ -239,8 +239,11 @@ other time zones.
 cannot flag, because `--erasableSyntaxOnly` arrived in TypeScript 5.8. Node's documentation says
 so; the fix is on my side (upgrade TypeScript), and it is recorded in
 [INTERNAL-FRICTION.md](INTERNAL-FRICTION.md). Every run prints an ExperimentalWarning for type
-stripping. `package.json` requires Node 22.6 or later, the first release with type stripping,
-but only Node 23.11 was actually run.
+stripping. Node 22.6.0, the first release with type stripping, cannot parse a typed private class
+field: `#answers = new Map<string, StoredAnswer>()` fails with "SyntaxError: Unexpected
+identifier '#answers'". A CI run on 27 September found 22.7.0, 22.8.0, 22.9.0, 22.10.0,
+22.12.0, 22.14.0, 22.16.0, 22.18.0 and 22.23.2 all pass, so `package.json` requires 22.7
+or later.
 
 **How onboarding felt.** Not timed; both were already installed.
 
