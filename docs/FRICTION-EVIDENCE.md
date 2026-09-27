@@ -1,51 +1,74 @@
-# A7 evidence ledger and exclusions
+# Evidence ledger and exclusions
 
-Audit date: September 13, 2026. Baseline: `60dc1881e73f10d9c219f5eabb6fe3d5da69623d`. The repository has nine commits. The earlier log entered the repository in one commit, `de5e2f9`; it was not accompanied by original failing console transcripts. Code corroborates several remedies, but does not prove exact elapsed time or that every incident occurred as narrated. New local probes are explicitly dated A7.
+Updated September 27, 2026. This file says where each friction-log entry's evidence is, and what
+was withdrawn or narrowed along the way.
 
-## Published log evidence
+The repository has 18 commits, from September 8 to September 18, 2026; the September 27 fixes
+come on top of them. The first friction log entered the repository in one commit (`de5e2f9`,
+September 9) without the failing console output behind it. Later entries were written from
+reproductions made on the dates given. Code corroborates several of the early remedies, but it
+cannot prove elapsed times or that every early incident happened as first told, so no elapsed
+time is claimed anywhere.
 
-| Entry | Primary evidence | Qualification |
+## Evidence for each friction-log entry
+
+| Entry | Evidence | Qualification |
 |---|---|---|
-| FL01 | Official Amazon lifecycle and overview URLs in the entry; `test/wire.test.ts:78`; A5 actual client result | Documentation mismatch, not an observed Alexa negotiation failure. SDK fallback date is legitimate compatibility behavior. |
-| FL02 | Official environment setup and overview; prior A3 walkthrough re-read in A7 | No private CLI install, npm 404 test, contact attempt or account rejection is claimed. |
-| FL03 | Official authentication page: runtime-flow step 5 versus scope table/token requirements | Documentation inconsistency, not a live security finding. |
-| FL04 | [A7 probe](feedback-evidence/probe.mjs), [results](feedback-evidence/legacy-probe-results.json); `src/server.ts:105`; historical `de5e2f9` log #1 | The early-close failure was reproduced with a delayed tool. SSE works with correct lifetime. |
-| FL05 | Same A7 results, schemas section; `src/mcp/tools.ts`; historical log #2 | Zod raw shape AND z.object work. Runtime already explains unsupported JSON Schema. The exact original TypeScript diagnostic was not preserved. |
-| FL06 | Same A7 results, merges section; `src/ingest/read.ts:94`; `src/table/header.ts:82` | Only ExcelJS 4.4.0 tested. Array merge list and public master relationship observed. No cross-version object-shape claim. |
-| FL07 | Same A7 results, parameterProperty/erasableFlag; `src/query/engine.ts:87`; official Node23 documentation | Node error reproduced; TS5.7.2 lacks the flag. Node docs explicitly explain it for newer TypeScript. |
+| 1. Lifecycle example revision | Overview (last updated Aug 3, 2026) and lifecycle page (Jul 10, 2026), read September 27; `test/wire.test.ts`: "negotiates exactly the revision the hackathon requires" | A documentation mismatch, not an observed Alexa negotiation failure. |
+| 2. Partner-only status missing from setup pages | Overview and setup pages; hackathon FAQ, read September 27 | No private CLI install, contact attempt or account rejection is claimed. |
+| 3. Service-token scopes | Authentication page: runtime-flow step 5 against the scope table and token requirements, re-checked September 27 | A documentation inconsistency, not a live security finding. |
+| 4. Who writes the spoken reply | Functional Requirements §2 and §9, "The Conversation Surface", "Tools, Schema, and Data Design" (all last updated Jul 21, 2026), read September 27 | How Alexa+ actually treats a `spoken` field is unknown; we could not run it. |
+| 5. Accessibility checks need a device | "Design Guide: Accessibility" and "Test Your Add-on Customer Experience" (Jul 21, 2026); hackathon FAQ; read September 27 | No device or simulator was available to try. |
+| 6. Transport closed too early | [Probe](feedback-evidence/probe.mjs) and [results](feedback-evidence/legacy-probe-results.json), September 13; re-run in a clean clone September 27 | The early-close failure reproduces with a delayed tool; SSE works when the transport is kept open. |
+| 7. Refused arguments | Reproduced September 27 with a throwaway script (steps in the entry); `createToolError` is declared `private` in `node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.d.ts`; `src/server.ts` (`speakRefusals`); `test/integration.test.ts` | The script is not committed; the entry gives enough to repeat it. |
+| 8. JSON Schema against Zod | Same probe results, schemas section; `src/mcp/tools.ts` | Both Zod forms work; the runtime already explains the JSON Schema refusal. The original compiler message was not kept. |
+| 9. ExcelJS merges | Same probe results, merges section; `src/ingest/read.ts`; `src/table/header.ts` | Only ExcelJS 4.4.0 was tested. |
+| 10. npm and PowerShell | Reproduced September 27 with a throwaway package (steps in the entry); `test/ingest-cli.test.ts` | PowerShell 7.6.6, npm 11.7.0, Node 23.11.0 on Windows 11 only. |
 
-Run the optional small reproduction from the repository root with existing compatible dependencies:
+To repeat the September 13 probes from the repository root:
 
 ```powershell
 node docs/feedback-evidence/probe.mjs
 ```
 
-It makes synthetic local tool calls, creates an in-memory workbook and invokes the existing compiler/runtime. It writes its results beside itself. Expected negative cases are errors being documented, not a product test suite passing. No network, installation or credentials are needed. The original A3/A5/A6 research scripts remain in the workspace handoff; the JSON copies here expose the observations used in these drafts.
+It makes synthetic local tool calls, builds an in-memory workbook and invokes the installed
+compiler and runtime. It needs no network, installation or credentials. It **rewrites**
+`legacy-probe-results.json` and `probe-progress.txt` beside itself, so run it in a copy if you
+want the committed results left alone. Its expected negative cases are the errors being documented,
+not failing tests.
 
-## Withdrawn or qualified historical statements
+## Withdrawn or narrowed statements
 
-| Earlier statement / source at baseline | Disposition |
+| Earlier statement | What became of it |
 |---|---|
-| “Written while building, not reconstructed afterwards”; original FRICTION-LOG:3 | Withdrawn for this revision. We are reconstructing from evidence; do not fabricate a contemporaneous diary. |
-| Five first-hand entries in exact format; SUBMISSION:186 | Replaced. Old entries had separate expected/actual fields and some omitted a workaround. The new log has exactly six named fields per entry. |
-| SDK onboarding took under an hour; SUBMISSION:157 | Omitted. No trustworthy elapsed-time measurement. |
-| SSE conflicts inherently with stateless handling; old log #1 | Narrowed to our premature cleanup, with a successful SSE control. |
-| registerTool rejects z.object; old log #2 | Refuted by successful local call. |
-| SDK default revision proves incorrect negotiation; old log #3 | Incorrect inference. Show a negotiated exchange; fallback constants alone are not a defect. |
-| ExcelJS merge models change shape across versions; old log #4 | Unverified. No named second version or preserved reproduction. |
-| Node docs omit erasableSyntaxOnly; old log #5 | Refuted by official Node23 documentation. |
-| Toolkit access impossible for all non-partners; briefing / old log #6 | Not established by our account experience. Report only the documented prerequisite and unknown access path. |
-| MCP Apps metadata worked first time; SUBMISSION:174 | Withdrawn as an interoperability claim; A5 F15 shows an incomplete hand-written bridge. |
-| Extension-package version/React peer conflicts; widget.ts:19 | Design rationale in a comment, not an installed-package failure. Keep out of observed friction until exact package metadata/version evidence is supplied. |
-| Per-request store destroyed explain/resume; SUBMISSION:102, server.ts:69 | Historical self-authored implementation note. Current shared store remedy is visible; original failing revision/transcript is absent. A5 restart loss is separately observed in APP-F12. Do not count both as independently reproduced incidents. |
-| Merged-header fix regressed stacked header, then multiple tables; ingest.golden.test.ts:5 and SUBMISSION:104 | Historical note supports why fixtures were added. The intermediate failing patch is absent; no exact failing input/output or recovery sequence can honestly be reconstructed. Not promoted to a six-field observed vendor log. |
-| Screen-reader pitch was corrected; SUBMISSION:122 | Editorial learning, not a screen-reader runtime incident. No JAWS/NVDA trial or disabled-user session was conducted here. |
-| A5 F14 automatic script cuts TTS; index.html:216/236 and app.js:137 | Source-level ordering finding only; no audible run. A6 deliberately avoids batch playback. Not a first-hand speech failure log. |
-| Recognition error fallback, late fetch response, remote cold starts | Code-derived risks or untested hypotheses, not observed service incidents. |
-| Cloudflare signup/payment/cold-start experience | No account/deployment evidence. Do not fill the old placeholder with invented experience. |
+| "Written while building, not reconstructed afterwards" (first friction log) | Withdrawn. The log is reconstructed from evidence and says so. |
+| Five first-hand entries in the required format (first submission draft) | Replaced. The old entries did not all have the six fields; every entry now does. |
+| "SDK onboarding took under an hour" (first submission draft) | Omitted. Nothing measured it. |
+| SSE cannot work with stateless handling | Narrowed to our own early cleanup (entry 6), with a working SSE control. |
+| `registerTool` rejects `z.object()` | Refuted by a working call (entry 8). |
+| The SDK's fallback revision proves wrong negotiation | Wrong inference. A negotiated 2025-11-25 exchange is tested instead. |
+| ExcelJS merge models change shape between versions | Unverified: no second version was named or reproduced. Not claimed. |
+| Node's documentation omits `erasableSyntaxOnly` | Refuted: Node 23's TypeScript page recommends it with TypeScript 5.8 or later. The mismatch is our toolchain, now recorded in [INTERNAL-FRICTION.md](INTERNAL-FRICTION.md). |
+| Toolkit access is impossible for everyone outside the partner programme | Narrowed to what is documented: the hackathon FAQ, read September 27, says there is "no way for hackathon participants to apply for or gain access". |
+| The MCP Apps widget "worked first time" | Withdrawn. It did not complete a handshake at the time. It now does in a simulated host (`test/engine-widget.test.ts`), and it has still not been tried in a real MCP Apps host. |
+| The extension package's version and React peer dependencies ruled it out (`src/mcp/widget.ts` comment) | Narrowed. The 1.7.5 line is compatible and its React peers are optional (npm registry metadata, checked September 13); the comment now gives a design reason, that one static document does not justify the dependency, not an install failure. Not in the friction log. |
+| A per-request store destroyed explain and resume (early notes) | A historical note without its failing revision. The restart loss found later is a separate case in [INTERNAL-FRICTION.md](INTERNAL-FRICTION.md); they are not counted as two reproduced incidents. |
+| The merged-header fix broke stacked headers, then multiple tables | Explains why the golden fixtures exist, but the failing intermediate patch is gone. Not reconstructed by guessing. |
+| The screen-reader pitch was corrected | An editorial lesson. No JAWS or NVDA session was run for this project. |
+| The scripted demo cut its own speech short | Found by reading the code, then measured in a browser on September 27 before the fix. The page now waits for speech to end; it has not been re-timed with audio since. The demo script runs one line at a time anyway. |
+| Bookmarks last "across days, backed by KV" | Withdrawn. KV was never bound. On the Worker, state is now in Durable Objects; locally it is memory. |
+| "No cold start" on Workers | Not measured on Cloudflare; nothing is deployed. Locally, `wrangler check startup` reported 68–96 ms of active startup CPU in two runs. |
+| Test and tool counts of 60, 62 or 100 tests and "eight tools" | Out of date. This build has 439 tests and nine tools. |
+| Speech-recognition error fallback, late responses, remote cold starts | Risks derived from code, not observed service incidents. |
+| Cloudflare signup, payment and deploy experience | No account or deployment evidence. Nothing invented to fill the gap. |
 
 ## Coverage and attribution
 
-Reviewed the commit history and current source/comments/tests/README/docs. Every explicit legacy friction item is either rewritten with evidence or accounted for above. Seventeen observed A5 findings plus one conditional number-locale probe are in INTERNAL-FRICTION.md; source-only F14 is excluded from that observed set. The historical header and multi-table regression claims were not recreated by guessing inputs. New A7 harness mistakes (for example, reusing a stateless transport across probe requests) were corrected as probe bugs, not presented as old product friction.
+Every friction item from the project's history is either rewritten with evidence or accounted
+for above. Our own defects are in [INTERNAL-FRICTION.md](INTERNAL-FRICTION.md), never in the
+vendor log. Mistakes in our own probe scripts (for example, reusing a stateless transport across
+probe requests) were fixed as probe bugs and are not presented as product friction.
 
-No AWS runtime service, Amazon private toolkit, real voice endpoint or live Apps host is verified. Feedback includes actual direct dependencies and relevant docs-only exposure, with untested surfaces explicitly labelled. Product feedback and logs do not make the application release-ready.
+Not verified by anyone on this project: any AWS runtime service, Amazon's private toolkit, a
+real Alexa device or simulator, a real MCP Apps host, or a deployed Worker. Product feedback and
+friction entries do not make the application release-ready.

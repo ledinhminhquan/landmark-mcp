@@ -26,8 +26,8 @@
  * identity, and `explain` can read the path back on demand.
  */
 
-import { a1, isBlank, type CellValue, type MergeSpan } from './model.ts';
-import { headerSignals, type Grid, type HeaderSignals } from './infer.ts';
+import { a1, isBlank, isPivotHeading, type CellValue, type MergeSpan } from './model.ts';
+import { headerSignals, speakDate, type Grid, type HeaderSignals } from './infer.ts';
 
 /** Where a cell's value came from, so we never silently invent data. */
 export type CellOrigin = 'literal' | 'merge';
@@ -168,7 +168,12 @@ export interface HeaderAnalysis {
 const CONFIDENT = 0.7;
 /** Below this, a row is data, not a label row. */
 const MIN_HEADER = 0.5;
-const MAX_HEADER_ROWS = 3;
+/**
+ * The deepest heading block considered. Three missed the common four-level report
+ * (FY / Revenue / 2025, 2026 / H1, H2): its last two heading rows were read as records,
+ * and four columns came out as "FY Revenue", "FY Revenue 2" and so on, silently.
+ */
+export const MAX_HEADER_ROWS = 5;
 
 /**
  * Work out how many rows at the top of a region are header, and how sure we are.
@@ -220,6 +225,17 @@ export function analyseHeader(
     signals.push(headerSignals(slice(r), body));
   }
 
+  // A PivotTable says where its headings end: "Sum of Revenue | Column Labels" over
+  // "Row Labels | 2023 | 2024". Scored, the first row alone won at 0.91 and nothing was
+  // flagged, though the years under it were read as a record.
+  if (signals.length >= 2 && isPivotHeading(slice(startRow), slice(startRow + 1))) {
+    return {
+      chosen: { rows: 2, score: 0.95, why: "an Excel PivotTable's headings fill its first two rows" },
+      alternatives: [],
+      ambiguous: false,
+    };
+  }
+
   // A single-row region: nothing below it, so there is nothing to infer from. Read it
   // as data rather than as a header — a heading with no rows beneath it labels
   // nothing, and calling it a header would leave the region with no records at all.
@@ -231,33 +247,89 @@ export function analyseHeader(
     };
   }
 
+  // A region with no mostly-typed column anywhere gives the one strong signal nothing
+  // to work with; what is left is distinctness, brevity and density.
+  const untyped = signals.every((s) => s.typedColumns === 0);
+  // In such a region, density must not pick a lower row as the label row. A label
+  // row with a blank top-left corner ("", Mon, Tue over Anh, Gym, Rest) is less dense
+  // than every record under it, so letting fullness decide ate the first record into
+  // the headings. Where typed columns exist, a stacked grouping row really is sparser
+  // than the row it groups, and the discontinuity signal keeps that honest.
+  const weight = (s: HeaderSignals): number => (untyped ? s.score - 0.15 * s.density : s.score);
+  // And for the same reason, density must not decide whether a row there is labels at
+  // all: "Name, Email" over four filled columns, or a roster whose two left columns
+  // have no heading, scored under the threshold only for their blanks, and the table
+  // lost every column name. There, a row is judged as though it were full.
+  const effective = (i: number): number => {
+    const s = signals[i]!;
+    return untyped ? s.score + 0.15 * (1 - s.density) : s.score;
+  };
+
+  // A row of group labels as a CSV writes a merged heading — "Contact", "", "Location",
+  // "" — has its labels separated by the blanks of the columns each one covers. That is
+  // the same structural fact a merge records, and it is read the same way: as a level
+  // above the row that names the columns. At most half full, so a record that merely
+  // has a gap or two is not taken for one.
+  const grouping = (i: number): boolean => {
+    const row = slice(startRow + i);
+    const filled = row.flatMap((v, c) => (isBlank(v) ? [] : [c]));
+    if (filled.length < 2 || filled.length * 2 > row.length) return false;
+    return filled[filled.length - 1]! - filled[0]! + 1 > filled.length;
+  };
+
   let best = 0;
   // Strictly greater keeps the shallowest row on a tie, so a plain single-header
-  // table is never over-read as multi-level.
+  // table is never over-read as multi-level. The margin keeps floating-point noise
+  // between two equal sums from counting as a win.
   for (let i = 1; i < signals.length; i++) {
-    if (signals[i]!.score > signals[best]!.score) best = i;
+    if (weight(signals[i]!) > weight(signals[best]!) + 1e-9) best = i;
   }
-  const top = signals[best]!;
 
   // ── no row separates labels from data ────────────────────────────────────
-  if (top.score < MIN_HEADER) {
+  if (effective(best) < MIN_HEADER) {
     const headerless: HeaderCandidate = {
       rows: 0,
-      score: 1 - top.score,
+      score: 1 - effective(best),
       why: 'no row looks like labels over data',
     };
     // The all-numeric veto is the reason the score is low, not evidence that the
-    // row is data. Offer both readings and say we are unsure.
-    if (signals[0]!.allNumeric) {
+    // row is data. So is a first row of labels whose typed cells are years or dates
+    // ("Region, 2024, 2025, 2026"; "Department, Jan 2024, Feb 2024"): both would read
+    // as headings to anyone looking. Offer both readings and say we are unsure.
+    const first = signals[0]!;
+    if (first.allNumeric || first.vetoed) {
       return {
         chosen: headerless,
         alternatives: [
-          { rows: 1, score: 0.5, why: 'read the first row as labels, such as years' },
+          {
+            rows: 1,
+            score: 0.5,
+            why: `read the first row as labels, such as ${first.labelKind === 'dates' ? 'dates' : 'years'}`,
+          },
         ],
         ambiguous: true,
       };
     }
-    return { chosen: headerless, alternatives: [], ambiguous: top.score > 0.35 };
+    // Ambiguous means there is something else to offer. An uncertain reading with no
+    // alternative left the listener hearing "I could instead ." and nothing to say.
+    // A lower row that does read as labels on its own is offered too: in a text-only
+    // region it lost only because fullness is not allowed to decide there.
+    const offers: HeaderCandidate[] = [];
+    signals.forEach((_, i) => {
+      const score = effective(i);
+      if (i === best ? score > 0.35 : score >= MIN_HEADER) {
+        offers.push({
+          rows: i + 1,
+          score,
+          why: i === 0 ? 'read the first row as labels' : `read the first ${i + 1} rows as headings`,
+        });
+      }
+    });
+    // Shallowest first. The first offer is the one said aloud, and the one-row reading
+    // is both the commonest shape and the one that costs no record if it is wrong;
+    // ranked by score, "read the first 2 rows as headings" could be spoken first.
+    offers.sort((a, b) => a.rows - b.rows);
+    return { chosen: headerless, alternatives: offers, ambiguous: offers.length > 0 };
   }
 
   // ── extend downward, but only on structural evidence ─────────────────────
@@ -271,16 +343,24 @@ export function analyseHeader(
 
   let last = best;
   let extendedBy = '';
-  while (last + 1 < signals.length && signals[last + 1]!.score >= MIN_HEADER) {
+  while (last + 1 < signals.length && effective(last + 1) >= MIN_HEADER) {
     const row = startRow + last;
     const merged = spansColumns(row);
-    const sparser = density(row) < density(row + 1);
-    if (!merged && !sparser) break;
-    extendedBy = merged ? 'a heading spans several columns' : 'a grouping row sits above a denser one';
+    // Not in an untyped region, for the reason given above: there, a blank corner
+    // makes the label row sparser than the first record, which proves nothing.
+    const sparser = !untyped && density(row) < density(row + 1);
+    const grouped = untyped && grouping(last);
+    if (!merged && !sparser && !grouped) break;
+    extendedBy = merged
+      ? 'a heading spans several columns'
+      : grouped
+        ? 'group labels each cover several columns'
+        : 'a grouping row sits above a denser one';
     last++;
   }
 
   const deepest = signals[last]!;
+  const deepestScore = effective(last);
   const rows = last + 1;
 
   // Three ways to end up with more than one header row, and the reason spoken aloud
@@ -297,25 +377,44 @@ export function analyseHeader(
           ? 'headings are stacked above the row that names the values'
           : `${extendedBy}, over a row of labels`;
 
-  const chosen: HeaderCandidate = { rows, score: deepest.score, why };
+  const chosen: HeaderCandidate = { rows, score: deepestScore, why };
 
   // Where the boundary row is only weakly supported — an all-text table gives the
   // discontinuity signal nothing to work with — offer the neighbouring readings.
   const alternatives: HeaderCandidate[] = [];
-  if (deepest.score < CONFIDENT) {
+  if (deepestScore < CONFIDENT) {
+    // The one-row reading is the commonest shape of all, and a multi-row reading that
+    // is unsure of itself must offer it: otherwise the correction that restores the
+    // lost first record is never suggested.
+    if (rows > 1) {
+      alternatives.push({ rows: 1, score: effective(0), why: 'read only the first row as headings' });
+    }
     if (rows > 0) {
-      alternatives.push({ rows: 0, score: 1 - deepest.score, why: 'treat every row as data' });
+      alternatives.push({ rows: 0, score: 1 - deepestScore, why: 'treat every row as data' });
     }
     if (rows < MAX_HEADER_ROWS && signals.length > rows) {
       alternatives.push({
         rows: rows + 1,
-        score: signals[rows]?.score ?? 0,
+        score: effective(rows),
         why: 'take one more row as a second heading level',
       });
     }
   }
 
-  return { chosen, alternatives, ambiguous: deepest.score < CONFIDENT };
+  // A first record that is a label over a run of years — "Row Labels, 2023, 2024,
+  // 2025" under a pivot's value heading — is far more likely a heading level the
+  // evidence missed than a record. Said as uncertain, with the reading that fixes it.
+  const record = slice(startRow + rows);
+  const figures = record.filter((v) => typeof v === 'number' || (typeof v === 'string' && /^\s*\d{4}\s*$/.test(v))).map(Number);
+  const years =
+    figures.length >= 2 && figures.every((y, k) => Number.isInteger(y) && y >= 1900 && y <= 2100 && (k === 0 || y === figures[k - 1]! + 1));
+  const labelled = typeof record.find((v) => !isBlank(v)) === 'string';
+  if (years && labelled && rows < MAX_HEADER_ROWS && signals.length > rows && !alternatives.some((a) => a.rows === rows + 1)) {
+    alternatives.unshift({ rows: rows + 1, score: 0.5, why: 'take one more row as a second heading level' });
+    return { chosen, alternatives, ambiguous: true };
+  }
+
+  return { chosen, alternatives, ambiguous: deepestScore < CONFIDENT };
 }
 
 /** Backwards-compatible shorthand: the chosen row count only. */
@@ -351,7 +450,7 @@ export function speakValue(
   const shown = isBlank(value)
     ? 'empty'
     : value instanceof Date
-      ? value.toDateString()
+      ? speakDate(value)
       : String(value);
   const note = origin === 'merge' ? ' (inherited from a merged label)' : '';
   return `${what}${where}: ${shown}${note}`;

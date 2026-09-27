@@ -1,175 +1,252 @@
 # Product feedback
 
-Prepared September 13, 2026, for the existing Landmark project. Each entry uses the five requested fields. The reuse answers are evidence-based engineering recommendations for the entrant to review, not invented quotations or personal feelings. No onboarding duration is claimed.
+Updated September 27, 2026. One entry for each tool, API, SDK or body of documentation this
+project actually used, each answering the same five questions. Everything here can be checked
+against the repository, its tests, the pages linked, or the [friction log](FRICTION-LOG.md).
+Where something was never measured, such as how long onboarding took, I say so rather than
+estimate it.
+
+No Amazon or AWS service is called at runtime. The Alexa+ toolkit, CLI, Local Inspector and Web
+Simulator were not used: the hackathon FAQ says participants cannot get them. AWS IAM, STS,
+CodeArtifact and CDK appear only as steps I read in the Alexa+ setup guide. Bedrock, Lambda, S3
+and the rest were not used, so there is no feedback on them to give.
+
+## Amazon Alexa+ MCP documentation (read only)
+
+**What I used it for.** Choosing the protocol revision and transport, shaping every spoken
+reply, and checking the design against Amazon's accessibility guidance. The pages I relied on
+were the MCP Toolkit Overview, the Functional Requirements, and the design guide's
+Conversation Surface, Tools, Schema, and Data Design, and Accessibility pages.
+
+**What worked well.** The overview states the target plainly: "Alexa+ for Builders supports the
+2025-11-25 version of the MCP specification", over Streamable HTTP. The Functional Requirements
+are concrete enough to become code. At most five options with pagination, voice responses
+under 30 seconds, no API codes, tool names or internal ids in anything a customer hears, and an
+actionable next step for every error: `src/voice/speak.ts` is built around exactly those rules.
+The accessibility page's "input parity" (voice only, without touching the screen; touch only,
+without voice) is one reason the voice page has a typed-question box that is always visible.
+
+**What needs work.** Five documentation problems, each in the friction log. The lifecycle
+example uses revision 2025-03-26 without saying why (entry 1). The partner-only status is
+missing from the setup pages a developer lands on (entry 2). The service-token scopes contradict
+each other (entry 3). The requirements hold the add-on to its spoken reply while the design
+guide says the add-on cannot script it (entry 4). And the accessibility checks can only be run
+on a device (entry 5).
+
+**How onboarding felt.** Not timed. I reached a working, tested MCP server on my own, but not an
+Alexa "hello world": the toolkit is partner-only, which I learned for certain from the hackathon
+FAQ rather than from the setup pages.
+
+**Would I build with it again?** Yes for the public MCP route these pages describe. For the
+private toolkit I cannot say; I never had access to it.
+
+## MCP specification 2025-11-25 and the TypeScript SDK 1.30.0
+
+**What I used it for.** The whole server: `McpServer` with nine tools, one `ui://` resource and
+server instructions, served through `WebStandardStreamableHTTPServerTransport`, stateless per
+request, with JSON responses. The tests also use the SDK's own `Client` and
+`StreamableHTTPClientTransport` against the server.
+
+**What worked well.** The Web-standard transport takes a `Request` and returns a `Response`, so
+one handler (`createHandler` in `src/server.ts`) runs unchanged on Cloudflare Workers and behind
+a small Node adapter; the deployed path and the tested path are the same code. SDK 1.30.0
+negotiates 2025-11-25 out of the box, and a test pins it. `enableJsonResponse: true` gives one
+complete response per call. The SDK's client echoes an `Mcp-Session-Id` it is given, so two SDK
+clients were kept apart with no configuration, and after a 405 on GET an idle client stopped
+asking for an event stream (both in `test/transport.test.ts`). The server, its first eight tools
+and the Streamable HTTP endpoint were committed on September 9, the day after the project's first
+commit.
+
+**What needs work.**
+
+- Arguments that fail the schema are refused before any handler runs, as text with no
+  `structuredContent`, and the method that builds that reply is `private`. A voice host has
+  nothing to say. I replaced it through a cast, which may break on upgrade (friction log 7).
+- Closing a per-request transport too early returns HTTP 200 with an empty body and no error
+  anywhere (friction log 6).
+- Every `McpServer` builds its own JSON Schema validator unless one is passed in. With a server
+  per request, that measured 0.10–0.16 ms per server against 0.01 ms or less with a shared
+  validator (four runs of 300 constructions, Node 23.11, September 27). Small, but the Workers
+  free plan allows 10 ms of CPU per request. The `jsonSchemaValidator` option fixes it; I would
+  like the stateless example to use it.
+- A stateless transport issues no session id. That is allowed, but it means every client lands
+  in the same application state unless the server issues an id itself, which Landmark now does
+  on each `initialize`.
+- Two mistakes were mine, not the SDK's: answering GET with an event stream that closed at once
+  (SDK clients then reconnected every second), and first registering tools from JSON Schema
+  (friction log 8).
+
+**How onboarding felt.** Not timed. The installed version could be exercised locally without a
+network; a fresh install from the lockfile (`npm ci`) completed in the September 27 end-to-end
+check.
+
+**Would I build with it again?** Yes, pinned to a known version, with the transport's lifetime
+handled as above and client-level tests.
+
+## MCP Apps extension (the `ui://` widget on `table_explain`)
+
+**What I used it for.** A widget that shows the grid around an answer's source cells, with the
+counted cells highlighted, for someone with some sight or a sighted colleague. It is declared in
+the tool's `_meta` and served as a `ui://landmark/explain` resource with the
+`text/html;profile=mcp-app` type, written against the core SDK, not the
+`@modelcontextprotocol/ext-apps` package.
+
+**What worked well.** The contract is small: a metadata key and one resource. The widget is a
+real `<table>` with header scopes, marks counted cells with text as well as colour, and writes
+only with `textContent`. Its handshake, teardown, ping, host theme and message-source check are
+covered in `test/engine-widget.test.ts`, which runs the widget's own script against a
+simulated host.
+
+**What needs work.** I had no real MCP Apps host to test in, and still have not tried one; the
+Alexa+ overview says Alexa+ supports MCP Apps, but its toolkit is not available to entrants. My
+first version did not complete the handshake at all, which a review found on September 12; that
+was my error, not the specification's.
 
-Amazon/AWS-specific feedback comes first. No Amazon/AWS service was called at runtime. IAM/STS/CodeArtifact/CodeCommit/CDK were documentation references, not integrations. Bedrock, AgentCore, Strands, Kiro, SageMaker, Lambda, API Gateway, S3, Ring, Bee and Fire TV were not used in the submitted implementation; there is no product-use feedback to fabricate for them. AWS hosting mentioned as a possibility is not AWS usage. Transitive dependencies and type-only packages are covered with their parent tool; no direct product experience is claimed for every transitive package.
+**How onboarding felt.** Not timed. I did not install the extension package, so I cannot rate
+its setup.
 
-Evidence: [ledger](FRICTION-EVIDENCE.md), [friction log](FRICTION-LOG.md), [internal application cases](INTERNAL-FRICTION.md).
+**Would I build with it again?** Yes, if there is a host to test against. The browser page in the
+demo does not render the widget, and the video does not show it.
 
-## PF01 — Alexa+ MCP Toolkit, CLI and onboarding documentation — docs only
+## Zod 3.25.76
 
-**What it was used for.** Read integration and setup guidance for an Alexa+ track MCP submission. The private SDK/CLI, Local Inspector and simulator were not installed or exercised.
+**What I used it for.** Input schemas for all nine tools, and the bounds on every input: text at
+most 200 characters (notes 500), at most 10 filters and 20 values per filter, result limits.
 
-**What worked well.** The overview provides a useful separation between our MCP server and the Alexa-side add-on. It explicitly names 2025-11-25 support. [Overview](https://www.developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-overview.html).
+**What worked well.** A bound is one call (`z.string().max(200)`), and the SDK accepts both a raw
+shape and `z.object()` (friction log 8). Out-of-range input never reaches a handler
+(`test/engine-tools.test.ts`: "inputs are bounded").
 
-**What needs work.** FL01–FL03 document revision mismatch, access prerequisites and inconsistent scope guidance. Runtime reliability and voice behavior cannot be rated from documentation.
+**What needs work.** Nothing in Zod itself. Its refusal messages ("String must contain at most 5
+character(s)") reach the caller through the SDK's refusal text, which is the SDK issue above. I
+keep Zod on the 3.x line the SDK version expects.
 
-**How onboarding felt.** We reached a working independent MCP endpoint, but did not reach an Alexa hello world. The setup assumes prior Solutions Architect coordination; Windows and this account’s onboarding remain unverified.
+**How onboarding felt.** Not timed. It came in with the SDK.
 
-**Would build with it again.** Conditional yes for a future authorized integration. The current submission uses independent MCP; this is an engineering recommendation, not a claim that the developer has already completed Alexa onboarding.
+**Would I build with it again?** Yes.
 
-## PF02 — AWS IAM, STS, CodeArtifact, CodeCommit and CDK setup references — docs only
+## ExcelJS 4.4.0
 
-**What it was used for.** Read the prerequisites and registry flow in the Alexa environment setup guide. No AWS CLI command, role assumption, IAM change, CodeArtifact login, CodeCommit checkout or CDK deployment was performed.
+**What I used it for.** Reading `.xlsx` files in the offline ingest step: values, merged ranges,
+number formats (to read percentages as percentages), hidden rows and columns, saved formula
+results and error cells. The fixture generator also writes the test workbooks with it.
 
-**What worked well.** The guide identifies the tools involved, making the private-registry dependency visible. [Environment setup](https://www.developer.amazon.com/docs/alexaplus/add-ons/set-up-your-development-environment.html).
+**What worked well.** Merge ranges and each covered cell's master are exposed (friction log 9).
+Number formats and hidden-row flags are there to read, which is how ingest warns about hidden
+rows and keeps a percent cell from being read as a grouped number
+(`test/ingest-xlsx.test.ts`: "a percent cell this reader wrote is never taken for a grouped
+number").
 
-**What needs work.** Explain the prior authorization step before giving credential and registry instructions, and mark which steps apply to MCP versus Category Action add-ons. We have no service behavior or billing complaint to report.
+**What needs work.** A merged area's covered cells all report the master's value, so provenance
+has to be kept separately (friction log 9). A cell value can be a plain value or one of several
+object shapes (formulas, rich text, hyperlinks, errors); my adapter turned some into
+"[object Object]" until it handled each (`test/ingest-xlsx.test.ts`: "formulas without results,
+rich-text links and error cells never become \"[object Object]\""). That was my bug, but the
+variety is worth a table in the documentation. `npm audit` reports a moderate `uuid` advisory
+through ExcelJS whose code path Landmark never reaches, and its suggested fix is a major
+downgrade ([SECURITY-NOTES.md](SECURITY-NOTES.md)).
 
-**How onboarding felt.** Documentation walkthrough only; account onboarding, permissions and first deployment were not tested.
+**How onboarding felt.** Not timed.
 
-**Would build with it again.** No current adoption decision: these services were not used to run Landmark. Reassess if the project obtains authorized toolkit access or chooses AWS hosting. Do not select AWS Builder on this basis.
+**Would I build with it again?** Yes for offline ingest, with fixtures for merged headings, hidden
+rows and unusual cells. It never ships to the server: a dry-run Worker bundle contains no ExcelJS
+code.
 
-## PF03 — MCP specification 2025-11-25
+## PapaParse 5.7.0
 
-**What it was used for.** Define initialization, tool discovery/calls, Streamable HTTP and structured tool results for the real server and demo client.
+**What I used it for.** Parsing CSV and other delimited files in the offline ingest step
+(`src/ingest/read.ts`). Unless the file is named as tab-separated, Landmark tries each candidate
+delimiter (comma, semicolon, tab, pipe) on the first 50 lines with PapaParse and keeps the one
+that fits best, then parses the file with it and reports the first three parse errors as
+warnings.
 
-**What worked well.** The local client negotiated 2025-11-25 and called eight tools. Structured output lets the client use a dedicated spoken field rather than extract data from narration.
+**What worked well.** It did what was asked in every test, including semicolon-separated files
+with decimal commas (`test/ingest-values.test.ts`: "a semicolon-separated file is split on
+semicolons, with comma decimals"). The rows that an early version lost were lost by my heading
+inference, not by the parser.
 
-**What needs work.** Our hand-written client mishandles valid SSE priming events (A5 F16); this is our implementation defect. A small versioned client conformance fixture would help catch it.
+**What needs work.** No PapaParse defect was found.
 
-**How onboarding felt.** Executable wire assertions made progress assessable. We used versioned references rather than assuming every latest example belongs to the same revision.
+**How onboarding felt.** Not timed; no large-file benchmark was run.
 
-**Would build with it again.** Yes, for explicit tool contracts and interoperability, after fixing our client and Origin-validation gaps. Local happy-path success does not establish full conformance.
+**Would I build with it again?** Yes, for this kind of offline use.
 
-## PF04 — @modelcontextprotocol/sdk 1.30.0
+## Cloudflare Workers, Wrangler 4.134.0 and Durable Objects
 
-**What it was used for.** McpServer, WebStandardStreamableHTTPServerTransport and tool/resource registration in Landmark; official client transport in verification.
+**What I used it for.** The deployment target: a Worker (`src/worker.ts`) serving the MCP
+endpoint and the voice page as static assets, with two SQLite-backed Durable Object classes, one
+per conversation and one per answer, declared with the `exports` form in `wrangler.jsonc`. It
+was run with `wrangler dev --local`, `wrangler deploy --dry-run` and `wrangler check startup`.
+It has not been deployed.
 
-**What worked well.** Existing dependencies supported real local HTTP calls and JSON responses. The A7 probe accepts both Zod raw shapes and z.object(), and rejects plain JSON Schema with a useful diagnostic.
+**What worked well.** The same Web-standard handler runs in the Worker. A dry run of this build
+listed both Durable Object bindings, with no ids to create or paste, and a bundle of about
+970 KiB (195 KiB gzipped). Under `wrangler dev --local` the page, `/health` (reporting
+`"state": "durable"`), the 405, the Origin check and a real tool call all behaved as on Node, and
+the Durable Object state survived a restart that reused the same `--persist-to` directory: an
+answer given before the restart was explained after it, from another conversation. In the
+September 27 end-to-end check on this machine, `wrangler dev` was ready in about 6 seconds and
+a warm `table_query` round trip took 45–58 ms (median).
 
-**What needs work.** FL04 describes the response-lifetime pitfall. FL05 requests a schema-porting example, not a diagnostic that already exists.
+**What needs work.** KV looked like the obvious store, but Cloudflare's own pages say it is
+eventually consistent, with changes taking up to 60 seconds or more to reach other locations,
+and the free plan allows 1,000 writes a day. That does not fit an answer written on one request
+and read back on the next; Durable Objects do. `wrangler check startup` measured 68–96 ms of
+active startup CPU in two local runs, and says itself that local CPU differs from Cloudflare's,
+so the free plan's 10 ms per-request limit could not be checked before deploying. The Worker
+entry imports `cloudflare:workers`, which Node's test runner cannot load, so the state logic had
+to be split into Node-safe files to be tested. `wrangler deploy --dry-run` writes a `.wrangler/`
+folder into the project, which needs to be in `.gitignore` (it is).
 
-**How onboarding felt.** No trustworthy elapsed-time record exists. We could exercise the installed version locally without reinstalling it; a fresh installation was not tested.
+**How onboarding felt.** Nothing was deployed, so signup, the first deploy, real latency and
+billing are unrated.
 
-**Would build with it again.** Yes, with a pinned compatible version, correct transport lifetime and real client-level checks.
+**Would I build with it again?** Yes, subject to a real deployment trial.
 
-## PF05 — Zod 3.25.76
+## Web Speech API (speech recognition and speech synthesis)
 
-**What it was used for.** Describe and validate the inputs of the eight MCP tools.
+**What I used it for.** The browser page listens with `SpeechRecognition` (or
+`webkitSpeechRecognition`) in en-US, one utterance at a time, and speaks each answer with
+`speechSynthesis` at rate 1.0. Recognition errors are turned into advice on what to do next, and
+there is always a typed-question box.
 
-**What worked well.** Valid inputs reached the handlers; both supported registration forms passed the isolated A7 call probe.
+**What worked well.** The recognition object exists in Chromium, and synthesis is reliable
+enough to time a video around: on September 27, in Chromium on this Windows machine with its
+default voice, each of the five demo replies spoke for 5.5–6.9 seconds and started 0.4–0.8
+seconds after the call.
 
-**What needs work.** Our descriptions and schemas must agree: table_rows promises cursor handling that its schema does not support (A5 F10). Zod is not responsible for that inconsistency.
+**What needs work.** Cancelling speech reports an "interrupted" error rather than an end event
+(seen in Chromium on September 27), so code waiting for the end must also listen for errors. The
+page is written to handle speech being refused before the first click, which browser autoplay
+rules can cause, but that path was only checked in simulation.
 
-**How onboarding felt.** Used the already-installed package through the MCP SDK. No installation duration or migration experience is available.
+**How onboarding felt.** Not timed. Recognition with a real microphone, iOS Safari, and NVDA with
+the page's own speech turned off have not been tried with this build.
 
-**Would build with it again.** Yes. Keep its version compatible with the chosen SDK and check schema/description consistency.
+**Would I build with it again?** For a prototype, yes, always with a typed path beside it.
 
-## PF06 — ExcelJS 4.4.0
+## Node.js 23.11 and TypeScript 5.7.2
 
-**What it was used for.** Read synthetic XLSX fixtures during offline ingestion and create test workbooks.
+**What I used it for.** Node runs the TypeScript directly with `--experimental-strip-types` for
+the local server, the ingest command and the test suite (`node --test`); `tsc` does the type
+check and the build for `npm start`.
 
-**What worked well.** The current version exposes merge spans and cell master relationships. Round-tripping the A7 merged workbook retained values and the A1 master.
+**What worked well.** No build step for development or tests. `npm test` runs all 439 tests in
+about 13–18 seconds on this machine, and `npm run typecheck` is clean. The suite also passes under
+other time zones.
 
-**What needs work.** Our adapter needs separate provenance (FL06). We cannot substantiate the old assertion about different model shapes across unspecified versions.
+**What needs work.** Node's type stripping rejects some syntax that TypeScript 5.7.2 accepts and
+cannot flag, because `--erasableSyntaxOnly` arrived in TypeScript 5.8. Node's documentation says
+so; the fix is on my side (upgrade TypeScript), and it is recorded in
+[INTERNAL-FRICTION.md](INTERNAL-FRICTION.md). Every run prints an ExperimentalWarning for type
+stripping. `package.json` requires Node 22.6 or later, the first release with type stripping,
+but only Node 23.11 was actually run.
 
-**How onboarding felt.** Existing fixtures and ingest tests supported local verification; there is no measured fresh-install onboarding time.
+**How onboarding felt.** Not timed; both were already installed.
 
-**Would build with it again.** Yes for bounded XLSX ingestion, with fixtures for merged headers, hidden sheets and unsupported content. Review dependencies separately from functional behavior.
+**Would I build with it again?** Yes, with TypeScript 5.8 or later.
 
-## PF07 — PapaParse 5.7.0 and @types/papaparse 5.3.15
+---
 
-**What it was used for.** Parse CSV and TSV files in the offline ingest path (`src/ingest/read.ts`).
-
-**What worked well.** The parser supplies rows used by the local inference pipeline. The all-text review case reached inference; its dropped rows were caused by our header heuristic, not the parser.
-
-**What needs work.** No reproducible PapaParse defect was established. Our adapter should preserve parse warnings and make delimiter/header choices visible.
-
-**How onboarding felt.** Read and exercised through the existing project setup, not a new install. No elapsed-time or large-file benchmark was recorded.
-
-**Would build with it again.** Yes for this bounded offline use; retain parse-error tests and avoid attributing downstream inference bugs to the parser.
-
-## PF08 — Node.js 23.11.0
-
-**What it was used for.** Run local HTTP hosting, TypeScript strip-only scripts, ingestion, tests and review probes.
-
-**What worked well.** The existing local server and client exchanged real MCP messages. Node’s error identifies unsupported parameter properties precisely.
-
-**What needs work.** Our runtime/compiler versions do not support the same syntax assumptions (FL07). EOL and deployment-runtime decisions are documented in A3; A7 does not claim a Node 24 run.
-
-**How onboarding felt.** Used an installed runtime on Windows. Runtime setup time and behavior on other operating systems were not measured.
-
-**Would build with it again.** Yes to Node, with a supported deployment release and a verified build/run path. Do not interpret this as recommending continued production use of Node 23.
-
-## PF09 — TypeScript 5.7.2 and @types/node 22.10.2
-
-**What it was used for.** Strict static checking and JavaScript output; Node type declarations for application code.
-
-**What worked well.** Saved A5 results show typecheck/build passed. This helped check contracts but did not validate the user workflows.
-
-**What needs work.** The installed compiler lacks erasableSyntaxOnly; emitted paths also disagree with our package start path (A5 F17). The path error belongs to project configuration.
-
-**How onboarding felt.** Existing compiler setup worked for build/typecheck. No clean installation or version upgrade was attempted.
-
-**Would build with it again.** Yes, after aligning runtime types, output paths and supported syntax. Add behavior checks where types cannot prove correctness.
-
-## PF10 — Browser Web Speech APIs
-
-**What it was used for.** The custom browser UI uses SpeechRecognition/webkitSpeechRecognition and speechSynthesis to route utterances to MCP and read results.
-
-**What worked well.** The original routing/client code was exercised with typed inputs and real local HTTP. This proves the MCP path, not microphone recognition or audible delivery.
-
-**What needs work.** Pending clarification, speech completion and runtime recognition-error fallback are application gaps. No live browser STT/TTS quality, network reliability or latency can be rated yet.
-
-**How onboarding felt.** API wiring is present; real microphone permission and speech onboarding remain untested.
-
-**Would build with it again.** Conditional yes for a prototype, subject to an actual browser rehearsal and accessible typed recovery. Do not claim successful hands-free use from code inspection.
-
-## PF11 — Cloudflare Workers, KV, Wrangler 4.130.0 and Miniflare dependencies
-
-**What it was used for.** Prepared Worker entry point and KV adapter. Wrangler is a development dependency; review called the original Worker module and used a deterministic KV double. No Cloudflare deployment or authenticated KV request is established.
-
-**What worked well.** The Web Request/Response boundary allowed local module probes. Injectable storage made key collisions reproducible without user data.
-
-**What needs work.** Missing asset routing, shared keys and volatile defaults are our defects (A5 F04–F06/F12). The saved audit also requires toolchain review. None of these prove a Cloudflare service outage.
-
-**How onboarding felt.** Signup, card requirement, native emulator startup, first deploy, remote latency and billing are unverified.
-
-**Would build with it again.** Conditional yes after a deployment trial and durable per-user storage fixes. There is not enough operational evidence for an unconditional reliability recommendation.
-
-## PF12 — MCP Apps metadata and hand-written iframe bridge
-
-**What it was used for.** Attempted an explain-result widget using core SDK metadata and an HTML resource. The extension package was not installed.
-
-**What worked well.** The repository contains an HTML resource with semantic table markup. This is implementation presence, not proof of host interoperability.
-
-**What needs work.** A5’s DOM/message double found no initialization handshake and no update from a standard tool-result notification. The custom bridge is incomplete; the old “worked first time” claim is withdrawn.
-
-**How onboarding felt.** No supported live MCP Apps host was exercised. Package-compatibility assertions in old comments were not independently reproduced in A7.
-
-**Would build with it again.** Conditional yes to the extension after using a compatible bridge and testing a real host; no to treating the current hand-written widget as finished.
-
-## PF13 — npm and Git
-
-**What it was used for.** npm scripts and saved dependency audit; Git for source/history. Versions and dependency behavior are preserved in local evidence rather than inferred from a clean README.
-
-**What worked well.** The lockfile records resolved dependencies; Git identifies the source baseline and separates this documentation revision from application code.
-
-**What needs work.** Our submission should distinguish a successful typecheck from a runnable package. npm start fails at the saved baseline; our scripts point to a missing file. No npm/Git bug is established.
-
-**How onboarding felt.** Used existing installations; no fresh package install, repository publish or GitHub authentication flow was performed in A7.
-
-**Would build with it again.** Yes, with working run instructions, reviewed lockfile changes and retained reproduction evidence.
-
-## PF14 — Claude Code and Codex assistance
-
-**What it was used for.** AI-assisted build notes/code and independent review, research, probes and submission drafting, as recorded in the project handoff/history.
-
-**What worked well.** The review produced reproducible counterexamples and corrected unsupported claims in the earlier feedback.
-
-**What needs work.** Generated prose overstated measured onboarding, SDK restrictions and widget success. Treat generated text as a draft requiring source and runtime checks, not incident evidence.
-
-**How onboarding felt.** These tools were already available. Initial setup, comparative speed and paid usage cost were not measured for this project.
-
-**Would build with it again.** Yes with human ownership and reproducible checks. This reflects the proposed development workflow; it is not a survey response from the principal.
+Not rated here: npm and Git, used in the ordinary way (npm's PowerShell behaviour is friction
+log entry 10), and the AI coding assistants used to draft parts of the code and these documents.

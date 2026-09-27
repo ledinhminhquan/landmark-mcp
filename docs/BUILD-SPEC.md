@@ -1,5 +1,65 @@
 # Landmark — Implementation-Ready Build Spec
 
+> **Read this first (banner added September 27, 2026).** This is the original plan, committed
+> on September 8, 2026, before the product existed. The body below is kept as it was written,
+> apart from a few lines corrected on September 18 (the registry claim in §1 and §8, and the
+> tool count in §3 and §9). It is a record of intent, not a description of the code. Where the body and the code
+> disagree, the code and the list below are right.
+>
+> Claims and plans that were later corrected or changed:
+>
+> - **"The registry has no assistive MCP server" (§1).** False, and corrected in §1: NeuroDock
+>   publishes end-user assistive servers, and the registry's search matches server names only,
+>   so it could not have settled the question. What survives is narrower: we could not find an
+>   MCP server that lets a blind person question their own spreadsheet by voice.
+> - **Alexa+ access (§1).** The hackathon FAQ, checked September 27, now says it directly: the
+>   gated Alexa+ tools are "available to select partners only - there is currently no way for
+>   hackathon participants to apply for or gain access."
+> - **KV for bookmarks and answers (§4, §5, §7, §9, §10).** Not used. Cloudflare documents KV
+>   as eventually consistent, with changes taking up to 60 seconds or more to reach other
+>   locations, and its free plan allows 1,000 writes a day. On the Worker, state lives in
+>   SQLite-backed Durable Objects: one per conversation for heading corrections and bookmarks
+>   (cleared after 90 days without use) and one per answer (kept 7 days). `wrangler deploy`
+>   creates them; there is no id to paste. The local server keeps state in memory and loses it
+>   on restart.
+> - **Bookmarks "survive across days and devices", keyed by a profile id (§5).** There are no
+>   profiles or accounts. The voice client keeps one random id per browser, so its bookmarks
+>   survive a reload in that browser. MCP hosts get a new conversation per connection, so their
+>   bookmarks and corrections last one connection; answers can still be explained from a later
+>   connection by their id, for a week on the Worker.
+> - **"MCP protocol sessions: none" (§5).** The transport is still stateless, but the server now
+>   issues an `Mcp-Session-Id` on every successful `initialize`. Without one, every standard MCP
+>   client shared a single state, and one caller's heading correction changed everyone's numbers.
+> - **GET and DELETE answer 405; Origin refused only when present and invalid (§5).** Planned
+>   here, not built at first: GET returned an event stream that closed at once, which made SDK
+>   clients reconnect every second, and Origin was checked only when an allow-list was set, which
+>   it never was. Both now work as planned, with tests, and JSON-RPC batches and bodies over 1 MB
+>   are refused too.
+> - **`answer_id` "24-hour TTL" (§3, §4).** Answers are kept 7 days on the Worker; in memory,
+>   the newest 500 are kept.
+> - **"V8 isolates, no cold start" (§7).** Not measured on Cloudflare, because nothing has been
+>   deployed. Locally, `wrangler check startup` measured 68–96 ms of active startup CPU in two
+>   runs; Wrangler notes that local CPU differs from Cloudflare's.
+> - **"The edge bundle contains the MCP SDK and Zod and nothing else" (§4).** It also contains
+>   the SDK's own dependencies. ExcelJS and PapaParse are indeed absent. A dry-run build of
+>   the current code is about 970 KiB (195 KiB gzipped).
+> - **Node 24 LTS (§4, §9).** Not adopted. The package requires Node 22.6 or later; development
+>   and tests ran on Node 23.11.
+> - **The MCP App widget through `@modelcontextprotocol/ext-apps` 1.7.5 (§6).** That package was
+>   not installed. The widget is written against the core SDK's `_meta` support and served as a
+>   `ui://` resource, and it has not been tried in a real MCP Apps host.
+> - **Deployment as a day-one task (§7, §9).** Nothing has been deployed as of September 27. The
+>   hackathon FAQ says a locally runnable public repository plus the demo video is enough for
+>   the Alexa+ track.
+> - **Demo plan (§8).** Replaced by `docs/DEMO-SCRIPT.md`. Do not film Excel or a screen reader:
+>   the rules forbid third-party trademarks without permission, and no screen-reader footage was
+>   ever made or tested for this project.
+> - **Friction-log candidates (§9, week 6).** Not all six were reproduced. `docs/FRICTION-LOG.md`
+>   contains only entries that were checked against the live pages.
+> - **Outreach venues (§8).** A review on September 27 reported that the posted rules of r/Blind
+>   and r/accessibility do not allow this kind of post. Read each community's current rules
+>   before posting anywhere.
+
 > **Name:** the repo is `landmark` (ARIA "landmark" is the accessibility term of art for an
 > orientation point — exactly what this provides for a table). The research agent drafted this
 > spec under the working name TableTalk; it has been renamed throughout.

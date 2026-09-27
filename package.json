@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=20.11"
+    "node": ">=22.6.0"
   },
   "main": "./dist/src/server.js",
   "types": "./dist/src/server.d.ts",
@@ -20,6 +20,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "node --watch --experimental-strip-types src/local.ts",
+    "prestart": "npm run build",
     "start": "node dist/src/local.js",
     "test": "node --test --experimental-strip-types test/**/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",

@@ -17,11 +17,12 @@
  *
  * Implementation note: this is wired with the core SDK's `_meta` support and a plain
  * resource, not with `@modelcontextprotocol/ext-apps`. The 2.x line of that package
- * peer-depends on the v2 SDK split (`core`/`client`/`server`), zod 4 and React; the
- * 1.7.5 line is compatible but still pulls React peers for a server that renders one
- * static HTML document. Declaring one metadata key and serving one resource does not
- * justify either. The contract below — the `ui/resourceUri` key and the
- * `text/html;profile=mcp-app` MIME type — is taken from that package's own build.
+ * peer-depends on the v2 SDK split (`core`/`client`/`server`), zod 4 and React. The
+ * 1.7.5 line is compatible, and its React peers are optional, but a server that renders
+ * one static HTML document, declares its metadata keys and serves one resource does not
+ * justify the dependency. The contract below — the `_meta.ui.resourceUri` key with its
+ * deprecated flat twin `ui/resourceUri`, and the `text/html;profile=mcp-app` MIME type —
+ * is taken from that package's own build.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -59,6 +60,12 @@ export const EXPLAIN_UI_URI = 'ui://landmark/explain';
  * well as colour, and the summary is in an `aria-live` region — so a screen-reader user
  * who opens the widget gets the same information a sighted one does, rather than a
  * decorative picture of it.
+ *
+ * The audience is people with residual sight, so contrast is held to WCAG AA: the
+ * "(counted)" marker is drawn in the body ink rather than the dimmed tone, which
+ * measured 4.1:1 on the dark highlight, and the highlight outline is dark enough to
+ * see against white. A host's own light or dark theme, when it sends one, wins over
+ * the operating system's, so a dark host does not get a white box dropped into it.
  */
 function widgetHtml(): string {
   return `<!doctype html>
@@ -67,31 +74,37 @@ function widgetHtml(): string {
 <meta charset="utf-8">
 <title>Where that number came from</title>
 <style>
-  :root { color-scheme: light dark; --line:#c9d2dc; --hi:#ffe9a8; --hi-line:#d9a800; --ink:#101418; --dim:#5b6672; --bg:#fff; }
+  :root { color-scheme: light dark; --line:#c9d2dc; --hi:#ffe9a8; --hi-line:#8a6d00; --ink:#101418; --dim:#5b6672; --bg:#fff; --bad:#a1260d; }
   @media (prefers-color-scheme: dark) {
-    :root { --line:#2b3542; --hi:#4a3c12; --hi-line:#c99a12; --ink:#e7edf3; --dim:#93a2b3; --bg:#0f141a; }
+    :root:not([data-theme="light"]) { --line:#2b3542; --hi:#4a3c12; --hi-line:#e0b52a; --ink:#e7edf3; --dim:#a3b1c0; --bg:#0f141a; --bad:#ff9a85; }
   }
+  :root[data-theme="dark"] { --line:#2b3542; --hi:#4a3c12; --hi-line:#e0b52a; --ink:#e7edf3; --dim:#a3b1c0; --bg:#0f141a; --bad:#ff9a85; }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
   body { margin:0; padding:14px; background:var(--bg); color:var(--ink);
          font:14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
   h1 { font-size:.78rem; letter-spacing:.1em; text-transform:uppercase; color:var(--dim);
        margin:0 0 .35rem; font-weight:600; }
   .said { font-size:1rem; margin:0 0 .9rem; }
+  .said.error { color:var(--bad); font-weight:600; }
   .wrap { overflow-x:auto; border:1px solid var(--line); border-radius:6px; }
+  .wrap:empty { display:none; }
   table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
   caption { text-align:left; padding:.5rem .6rem; color:var(--dim); font-size:.8rem; }
   th, td { border:1px solid var(--line); padding:.32rem .55rem; text-align:left; white-space:nowrap; }
   th { background:color-mix(in srgb, var(--line) 30%, transparent); font-weight:600; font-size:.85rem; }
   th[scope="row"] { font-weight:500; }
-  td.hi { background:var(--hi); box-shadow: inset 0 0 0 2px var(--hi-line); font-weight:600; }
-  td.hi .mark { font-size:.7rem; color:var(--dim); margin-left:.4rem; }
-  .addr { font:11px ui-monospace, monospace; color:var(--dim); }
+  .hi { background:var(--hi); box-shadow: inset 0 0 0 2px var(--hi-line); font-weight:600; }
+  .mark { font-size:12px; color:var(--ink); margin-left:.4rem; font-weight:500; }
+  tr.total > * { border-top:2px solid var(--ink); }
+  .addr { font:12px ui-monospace, monospace; color:var(--dim); }
   .note { margin-top:.7rem; font-size:.82rem; color:var(--dim); }
   .empty { color:var(--dim); }
 </style>
 </head>
 <body>
 <h1>Where that number came from</h1>
-<p class="said" id="said">Waiting for an answer to explain.</p>
+<p class="said" id="said" aria-live="polite">Waiting for an answer to explain.</p>
 <div class="wrap" id="wrap"></div>
 <p class="note" id="note" aria-live="polite"></p>
 
@@ -104,7 +117,8 @@ function widgetHtml(): string {
  * Dates arrive as ISO strings because that is what survives JSON. Printed raw, a
  * column of "2026-07-04T00:00:00.000Z" is exactly the machine noise a screen reader
  * user is being spared — and the colleague reading along over their shoulder is the
- * whole reason this panel exists.
+ * whole reason this panel exists. They are UTC midnight, so they are shown in UTC:
+ * in the viewer's own zone, everyone west of Greenwich saw every date a day early.
  */
 function show(value) {
   if (value === null || value === undefined) return '';
@@ -113,23 +127,54 @@ function show(value) {
   if (typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}T/.test(value)) {
     const d = new Date(value);
     if (!isNaN(d.getTime())) {
-      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      return d.toLocaleDateString(undefined, { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' });
     }
   }
-  if (typeof value === 'number') return value.toLocaleString();
+  // Grouped from five digits, as the voice reads it: "2,024" was shown for the year the
+  // voice called 2024.
+  if (typeof value === 'number') return value.toLocaleString(undefined, { useGrouping: Math.abs(value) >= 10000 });
   return String(value);
 }
 
-function render(data) {
+/**
+ * A cell in its column's kind. A CSV delivers every number as text, so a population
+ * showed as "100352192" beside a spoken "100,352,192"; a plain digit string in a
+ * number column is grouped here too. A number in a text column is an identifier and
+ * is shown as stored, and a leading zero always means an identifier.
+ */
+function showCell(value, kind) {
+  const numeric = kind === 'number' || kind === 'currency' || kind === 'percent' || kind === 'mixed';
+  if (typeof value === 'number' && !numeric) return String(value);
+  if (typeof value === 'string' && kind === 'number') {
+    const t = value.trim();
+    if (/^-?\\d+(\\.\\d+)?$/.test(t) && !/^-?0\\d/.test(t)) return show(Number(t));
+  }
+  return show(value);
+}
+
+function render(data, isError) {
   const said = document.getElementById('said');
   const wrap = document.getElementById('wrap');
   const note = document.getElementById('note');
-  if (!data || !data.grid) {
-    said.textContent = 'Ask a question with a number in it, then ask how I know.';
+  said.className = 'said';
+  // An error, or an explanation with no grid to draw, is shown as the sentence that
+  // was spoken. The panel used to answer a failed "how do you know" by telling the
+  // person to ask how it knew, next to a stale table.
+  if (!data || isError || !data.grid) {
+    said.textContent = (data && data.spoken) || (isError
+      ? 'That did not work, so there is nothing to show.'
+      : 'Ask a question with a number in it, then ask how I know.');
+    if (isError) said.className = 'said error';
+    wrap.replaceChildren();
+    note.textContent = '';
     return;
   }
   said.textContent = data.spoken || '';
-  const hi = new Set(data.cells || []);
+  // Every counted cell of every operand in this region, not the first five named aloud.
+  const hi = new Set(data.highlight || data.cells || []);
+  // The cell a highest or lowest came from: marked as the answer, not as one of many.
+  const win = new Set(data.winning || []);
+  const labelLetter = data.grid.label_letter || null;
 
   const t = document.createElement('table');
   const cap = document.createElement('caption');
@@ -138,11 +183,19 @@ function render(data) {
     : data.sheet;
   t.append(cap);
 
+  // The label column is the row header itself, rather than a copy of it in a column
+  // of its own: the grid used to read "Salaries | Engineering | Salaries | 480,000".
   const thead = document.createElement('thead');
   const hr = document.createElement('tr');
-  const corner = document.createElement('td');
-  hr.append(corner);
+  if (!labelLetter) {
+    const corner = document.createElement('td');
+    corner.textContent = 'Row';
+    corner.className = 'addr';
+    hr.append(corner);
+  }
+  const kinds = {};
   for (const col of data.grid.columns) {
+    kinds[col.letter] = col.kind;
     const th = document.createElement('th');
     th.scope = 'col';
     th.textContent = col.name;
@@ -155,26 +208,42 @@ function render(data) {
   thead.append(hr);
   t.append(thead);
 
+  let shown = 0;
+  const winShown = [];
   const tb = document.createElement('tbody');
   data.grid.rows.forEach((row) => {
     const tr = document.createElement('tr');
-    const rh = document.createElement('th');
-    rh.scope = 'row';
-    rh.textContent = row.label ?? String(row.number);
-    tr.append(rh);
+    if (row.total) tr.className = 'total';
+    if (!labelLetter) {
+      const rh = document.createElement('th');
+      rh.scope = 'row';
+      rh.textContent = String(row.number);
+      tr.append(rh);
+    }
     row.cells.forEach((cell) => {
-      const td = document.createElement('td');
-      td.textContent = show(cell.value);
-      if (hi.has(cell.address)) {
-        td.className = 'hi';
+      const letter = cell.address.replace(/\\d+$/, '');
+      const isLabel = labelLetter !== null && letter === labelLetter;
+      const el = document.createElement(isLabel ? 'th' : 'td');
+      if (isLabel) el.scope = 'row';
+      el.textContent = showCell(cell.value, kinds[letter]);
+      if (isLabel && row.total) {
+        const m = document.createElement('span');
+        m.className = 'mark';
+        m.textContent = '(total row)';
+        el.append(m);
+      }
+      if (hi.has(cell.address) || win.has(cell.address)) {
+        if (hi.has(cell.address)) shown++;
+        if (win.has(cell.address)) winShown.push(cell.address);
+        el.classList.add('hi');
         // Colour alone is not a signal a screen reader can convey.
         const m = document.createElement('span');
         m.className = 'mark';
-        m.textContent = '(counted)';
-        td.append(m);
+        m.textContent = win.has(cell.address) ? '(the answer)' : '(counted)';
+        el.append(m);
       }
-      td.title = cell.address;
-      tr.append(td);
+      el.title = cell.address;
+      tr.append(el);
     });
     tb.append(tr);
   });
@@ -183,8 +252,23 @@ function render(data) {
   wrap.replaceChildren(t);
 
   const bits = [];
-  if (data.cells?.length) bits.push(data.cells.length + ' cell(s) highlighted');
-  if (data.excluded?.length) {
+  if (winShown.length) {
+    bits.push('The answer is in ' + winShown.join(' and '));
+  }
+  // Counted in all, which the list of marked cells (at most 200) is not.
+  const counted = typeof data.counted === 'number' && data.counted > hi.size ? data.counted : hi.size;
+  if (hi.size) {
+    bits.push(counted > hi.size
+      ? counted + ' cells were counted; the first ' + hi.size + ' are marked, ' + shown + ' of them in this view'
+      : shown === hi.size
+        ? hi.size + (hi.size === 1 ? ' counted cell highlighted' : ' counted cells highlighted')
+        : shown + ' of ' + hi.size + ' counted cells are in this view');
+  }
+  // The other side of a comparison across tables is somewhere this grid is not.
+  for (const other of data.elsewhere || []) {
+    bits.push(other.name + ': ' + other.cells + (other.cells === 1 ? ' cell' : ' cells') + ' on ' + other.sheet + ', not shown here');
+  }
+  if (data.excluded && data.excluded.length) {
     bits.push(data.excluded.length + ' skipped: ' +
       data.excluded.slice(0, 4).map((e) => e.address + ' ' + e.reason).join(', '));
   }
@@ -205,6 +289,11 @@ function render(data) {
  * names and parameter shapes are taken from the ext-apps package's own generated
  * schema. The sandboxed frame has an opaque origin, so "*" is the target the
  * reference implementation uses too.
+ *
+ * Only the frame's own host is listened to. Any other frame in the same page can post
+ * a message here, and one that could pose as the host could light up cells that were
+ * never counted — false provenance, shown to someone relying on it. The reference
+ * transport makes the same check.
  */
 const UI_PROTOCOL = '${UI_PROTOCOL_VERSION}';
 const host = window.parent;
@@ -228,31 +317,61 @@ function reportSize() {
   });
 }
 
+/** Follow the host's theme when it states one, instead of the operating system's. */
+function applyHost(context) {
+  if (context && (context.theme === 'dark' || context.theme === 'light')) {
+    document.documentElement.setAttribute('data-theme', context.theme);
+  }
+}
+
 const initializeId = nextId++;
 
 window.addEventListener('message', (e) => {
+  if (e.source !== host) return;
   const msg = e.data;
-  if (!msg || typeof msg !== 'object') return;
+  if (!msg || typeof msg !== 'object' || msg.jsonrpc !== '2.0') return;
 
-  // The answer to our own ui/initialize.
-  if (msg.id === initializeId && !initialized) {
+  // The answer to our own ui/initialize. A refusal is not a handshake: announcing
+  // ourselves initialised after an error told the host something untrue.
+  if (msg.id === initializeId && msg.method === undefined) {
+    if (initialized || msg.error) return;
     initialized = true;
+    applyHost(msg.result && msg.result.hostContext);
     notify('ui/notifications/initialized', {});
     reportSize();
     return;
   }
 
   if (msg.method === 'ui/notifications/tool-result') {
-    render(msg.params?.structuredContent ?? msg.params?.data ?? null);
+    const result = msg.params || {};
+    render(result.structuredContent || null, result.isError === true);
     reportSize();
     return;
   }
 
-  // Hosts that predate the handshake just post the payload. Keep rendering it rather
-  // than showing an empty frame to someone whose host is a version behind.
-  if (msg.method === undefined && msg.id === undefined) {
-    render(msg.params?.data ?? msg.data ?? msg.result?.structuredContent ?? msg);
+  if (msg.method === 'ui/notifications/tool-cancelled') {
+    const said = document.getElementById('said');
+    said.className = 'said';
+    said.textContent = 'That was cancelled, so there is nothing to show.';
+    document.getElementById('wrap').replaceChildren();
+    document.getElementById('note').textContent = '';
     reportSize();
+    return;
+  }
+
+  if (msg.method === 'ui/notifications/host-context-changed') {
+    applyHost(msg.params);
+    return;
+  }
+
+  // Requests from the host expect an answer. A host waits for this one before it
+  // removes the frame, and used to wait out its own timeout instead.
+  if (msg.id !== undefined && msg.method !== undefined) {
+    if (msg.method === 'ui/resource-teardown' || msg.method === 'ping') {
+      post({ jsonrpc: '2.0', id: msg.id, result: {} });
+    } else {
+      post({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'Method not found' } });
+    }
   }
 });
 
@@ -263,20 +382,25 @@ post({
   params: {
     protocolVersion: UI_PROTOCOL,
     appInfo: { name: 'landmark-explain', version: '0.1.0' },
-    appCapabilities: {},
+    // The display modes this view supports, which the UI spec requires it to declare:
+    // it is drawn inline, beside the conversation.
+    appCapabilities: { availableDisplayModes: ['inline'] },
   },
 });
 
-render(null);
+// Nothing is rendered until a result arrives: "Waiting for an answer to explain." stays
+// up while the host runs the tool. Rendering the empty state here told someone who had
+// just asked "how do you know" to ask a question and then ask how it knew.
 </script>
 </body>
 </html>`;
 }
 
 /**
- * Register the widget resource. The tool that uses it declares
- * `_meta['ui/resourceUri']` pointing here; hosts that do not understand MCP Apps
- * ignore the key and the spoken answer is unaffected.
+ * Register the widget resource. The tool that uses it declares both
+ * `_meta.ui.resourceUri` and the deprecated flat `ui/resourceUri` pointing here (see
+ * uiMeta); hosts that do not understand MCP Apps ignore the keys and the spoken answer
+ * is unaffected.
  */
 export function registerWidget(server: McpServer, _index: LandmarkIndex): void {
   server.registerResource(

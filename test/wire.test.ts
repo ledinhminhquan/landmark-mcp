@@ -108,6 +108,9 @@ test('health reports the protocol and the corpus, for judging weeks from now', a
   assert.equal(body['protocol'], '2025-11-25');
   assert.equal(body['tables'], 3);
   assert.ok((body['rows'] as number) > 0);
+  // Answers, corrections and bookmarks all live in the store; without a durable one
+  // they last only as long as this process, and health has to say so.
+  assert.equal(body['state'], 'this instance only');
 });
 
 test('an unknown path 404s with a pointer rather than a blank page', async () => {
@@ -343,7 +346,11 @@ test('the widget document survives being built from a template literal', async (
   const show = new Function(`return (${source.replace('function show', 'function')})`)() as (
     v: unknown,
   ) => string;
-  assert.equal(show('2026-07-04T00:00:00.000Z'), 'Jul 4, 2026');
+  // In the viewer's own locale, which is how a browser shows it.
+  assert.equal(
+    show('2026-07-04T00:00:00.000Z'),
+    new Date('2026-07-04T00:00:00Z').toLocaleDateString(undefined, { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' }),
+  );
   assert.equal(show('North'), 'North');
   assert.equal(show(null), '');
 

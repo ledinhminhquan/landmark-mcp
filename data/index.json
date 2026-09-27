@@ -6,7 +6,7 @@
    "title": "01 flat",
    "format": "xlsx",
    "sourceName": "01-flat.xlsx",
-   "ingestedAt": "2026-09-18T11:19:47.046Z",
+   "ingestedAt": "2026-09-27T13:55:33.965Z",
    "regions": [
     {
      "id": "sales.t1",
@@ -79,7 +79,12 @@
        "kind": "text",
        "nonEmpty": 5,
        "empty": 0,
-       "distinct": 3
+       "distinct": 3,
+       "categories": [
+        "East",
+        "North",
+        "South"
+       ]
       },
       {
        "i": 1,
@@ -91,7 +96,14 @@
        "kind": "text",
        "nonEmpty": 5,
        "empty": 0,
-       "distinct": 5
+       "distinct": 5,
+       "categories": [
+        "An",
+        "Anh",
+        "Bảo",
+        "Chi",
+        "Dũng"
+       ]
       },
       {
        "i": 2,
@@ -167,7 +179,7 @@
    "title": "02 stacked header",
    "format": "xlsx",
    "sourceName": "02-stacked-header.xlsx",
-   "ingestedAt": "2026-09-18T11:19:47.064Z",
+   "ingestedAt": "2026-09-27T13:55:33.978Z",
    "regions": [
     {
      "id": "quarterly.t1",
@@ -235,7 +247,12 @@
        "kind": "text",
        "nonEmpty": 3,
        "empty": 0,
-       "distinct": 3
+       "distinct": 3,
+       "categories": [
+        "East",
+        "North",
+        "South"
+       ]
       },
       {
        "i": 1,
@@ -324,7 +341,7 @@
    "title": "03 merged header",
    "format": "xlsx",
    "sourceName": "03-merged-header.xlsx",
-   "ingestedAt": "2026-09-18T11:19:47.083Z",
+   "ingestedAt": "2026-09-27T13:55:33.990Z",
    "regions": [
     {
      "id": "compare.t1",
@@ -398,7 +415,11 @@
        "kind": "text",
        "nonEmpty": 2,
        "empty": 0,
-       "distinct": 2
+       "distinct": 2,
+       "categories": [
+        "North",
+        "South"
+       ]
       },
       {
        "i": 1,
@@ -514,7 +535,7 @@
    "title": "04 title and vmerge",
    "format": "xlsx",
    "sourceName": "04-title-and-vmerge.xlsx",
-   "ingestedAt": "2026-09-18T11:19:47.122Z",
+   "ingestedAt": "2026-09-27T13:55:34.000Z",
    "regions": [
     {
      "id": "budget.t1",
@@ -597,7 +618,13 @@
        "kind": "text",
        "nonEmpty": 5,
        "empty": 0,
-       "distinct": 4
+       "distinct": 4,
+       "categories": [
+        "Salaries",
+        "Software",
+        "Tooling",
+        "Travel"
+       ]
       },
       {
        "i": 2,
@@ -669,7 +696,7 @@
    "title": "05 three regions",
    "format": "xlsx",
    "sourceName": "05-three-regions.xlsx",
-   "ingestedAt": "2026-09-18T11:19:47.135Z",
+   "ingestedAt": "2026-09-27T13:55:34.009Z",
    "regions": [
     {
      "id": "mixed.t1",
@@ -718,7 +745,11 @@
        "kind": "text",
        "nonEmpty": 2,
        "empty": 0,
-       "distinct": 2
+       "distinct": 2,
+       "categories": [
+        "Gadget",
+        "Widget"
+       ]
       },
       {
        "i": 1,
@@ -802,7 +833,11 @@
        "kind": "text",
        "nonEmpty": 2,
        "empty": 0,
-       "distinct": 2
+       "distinct": 2,
+       "categories": [
+        "North",
+        "South"
+       ]
       },
       {
        "i": 1,
@@ -904,7 +939,10 @@
        "kind": "text",
        "nonEmpty": 1,
        "empty": 0,
-       "distinct": 1
+       "distinct": 1,
+       "categories": [
+        "Q3 close"
+       ]
       },
       {
        "i": 1,
@@ -916,7 +954,10 @@
        "kind": "text",
        "nonEmpty": 1,
        "empty": 0,
-       "distinct": 1
+       "distinct": 1,
+       "categories": [
+        "pending"
+       ]
       }
      ],
      "rows": [
@@ -939,7 +980,7 @@
    "title": "06 countries",
    "format": "csv",
    "sourceName": "06-countries.csv",
-   "ingestedAt": "2026-09-18T11:19:47.142Z",
+   "ingestedAt": "2026-09-27T13:55:34.015Z",
    "regions": [
     {
      "id": "06-countries.t1",
@@ -1030,7 +1071,17 @@
        "kind": "text",
        "nonEmpty": 8,
        "empty": 0,
-       "distinct": 8
+       "distinct": 8,
+       "categories": [
+        "Indonesia",
+        "Kenya",
+        "Nigeria",
+        "Norway",
+        "Peru",
+        "Poland",
+        "Thailand",
+        "Vietnam"
+       ]
       },
       {
        "i": 1,
@@ -1138,62 +1189,10 @@
      "inherited": [],
      "labelColumn": 0,
      "ambiguousColumns": []
-    },
-    {
-     "id": "06-countries.t2",
-     "sheet": "06-countries",
-     "title": null,
-     "headerRows": [],
-     "headerConfidence": 0.5,
-     "structure": {
-      "chosen": {
-       "headerRows": 0,
-       "score": 0.5,
-       "why": "a single row, with nothing beneath it to label"
-      },
-      "alternatives": [
-       {
-        "headerRows": 1,
-        "score": 0.5,
-        "why": "treat the row as a heading"
-       }
-      ],
-      "ambiguous": true,
-      "revision": 1
-     },
-     "startRow": 10,
-     "allRows": [
-      [
-       "Source: illustrative figures for testing only"
-      ]
-     ],
-     "firstDataRow": 10,
-     "firstCol": 0,
-     "rowCount": 1,
-     "columns": [
-      {
-       "i": 0,
-       "path": [],
-       "spoken": "column 1",
-       "col": "A",
-       "kind": "text",
-       "nonEmpty": 1,
-       "empty": 0,
-       "distinct": 1
-      }
-     ],
-     "rows": [
-      [
-       "Source: illustrative figures for testing only"
-      ]
-     ],
-     "inherited": [],
-     "labelColumn": 0,
-     "ambiguousColumns": []
     }
    ],
    "warnings": [
-    "This file holds 2 separate tables. Say which one you want, or ask me to describe them."
+    "A note on sheet \"06-countries\" reads: \"Source: illustrative figures for testing only\"."
    ]
   }
  ]

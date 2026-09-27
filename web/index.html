@@ -18,24 +18,40 @@
     --bad: #f87171;
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink);
-    font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-    display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 0;
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body { font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+  .app { display: grid; grid-template-columns: minmax(0, 1fr) 380px; min-height: 100vh; }
+  /* On a wide screen the page itself never grows; the conversation scrolls inside its
+     own panel. It used to grow the whole page instead, so after a few turns the newest
+     answer and the ask controls sat below the fold and the ring drifted down with them. */
+  @media (min-width: 861px) {
+    .app { height: 100vh; height: 100dvh; }
+    .device, .panel { min-height: 0; }
+    .device { overflow-y: auto; }
   }
-  @media (max-width: 860px) { body { grid-template-columns: 1fr; } }
+  @media (max-width: 860px) { .app { grid-template-columns: 1fr; } }
+
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
 
   /* ── device ─────────────────────────────────────────────────────────── */
   .device {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 2rem; padding: 3rem 2rem; position: relative;
+    display: flex; flex-direction: column; align-items: center; justify-content: safe center;
+    gap: 1.6rem; padding: 2.5rem 2rem; position: relative;
   }
   .puck {
-    width: 260px; height: 260px; border-radius: 50%;
+    width: 260px; height: 260px; border-radius: 50%; flex: none;
     background: radial-gradient(circle at 50% 42%, #1b2532, #0d1219 70%);
     border: 1px solid var(--edge);
     display: grid; place-items: center; position: relative;
     box-shadow: 0 30px 60px -20px #000;
+  }
+  @media (min-width: 861px) and (max-height: 760px) {
+    .puck { width: 210px; height: 210px; }
+    .device { gap: 1.1rem; padding: 1.5rem 2rem; }
   }
   .ring {
     position: absolute; inset: 10px; border-radius: 50%;
@@ -57,6 +73,7 @@
     box-shadow: 0 0 34px rgba(74, 222, 128, .16);
     animation: breathe 2s ease-in-out infinite;
   }
+  .puck[data-state="offline"] .ring { border-color: var(--bad); }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.02); } }
@@ -66,33 +83,41 @@
     font-size: .72rem; letter-spacing: .22em; text-transform: uppercase;
     color: var(--dim); text-align: center; padding: 0 2rem;
   }
-  .puck .label strong { display: block; font-size: 1.05rem; letter-spacing: 0;
+  .puck h1 { font: inherit; letter-spacing: inherit; margin: 0; }
+  .puck .status { display: block; font-size: 1.05rem; letter-spacing: 0;
     text-transform: none; color: var(--ink); margin-top: .6rem; font-weight: 500; }
+
+  .heard { min-height: 1.6em; margin: -.6rem 0; color: var(--dim); font-style: italic; text-align: center; max-width: 46ch; }
 
   .controls { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; justify-content: center; }
   button {
     font: inherit; padding: .7rem 1.4rem; border-radius: 999px; cursor: pointer;
     background: var(--ring); color: #06121c; border: 0; font-weight: 600;
   }
-  button.ghost { background: transparent; color: var(--dim); border: 1px solid var(--edge); font-weight: 400; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid #3a4a60; font-weight: 400; }
   button:disabled { opacity: .4; cursor: not-allowed; }
-  button:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+  button:focus-visible, input:focus-visible, .log:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 
-  .hint { color: var(--dim); font-size: .85rem; text-align: center; max-width: 46ch; }
+  .toggle { display: inline-flex; gap: .55rem; align-items: center; cursor: pointer; }
+  .toggle input { width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--ring); }
+
+  .hint { color: var(--dim); font-size: .85rem; text-align: center; max-width: 50ch; margin: 0; }
   .hint code { color: var(--ink); background: var(--panel); padding: .1rem .4rem; border-radius: 4px; }
+  .hint strong { color: var(--ink); font-weight: 500; }
 
-  /* ── side panel ─────────────────────────────────────────────────────── */
-  aside {
+  /* ── conversation panel ─────────────────────────────────────────────── */
+  .panel {
     background: var(--panel); border-left: 1px solid var(--edge);
-    display: flex; flex-direction: column; min-height: 100vh;
+    display: flex; flex-direction: column;
   }
-  @media (max-width: 860px) { aside { border-left: 0; border-top: 1px solid var(--edge); min-height: auto; } }
+  @media (max-width: 860px) { .panel { border-left: 0; border-top: 1px solid var(--edge); } }
 
   .bar {
     padding: .9rem 1.1rem; border-bottom: 1px solid var(--edge);
     display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
     font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; color: var(--dim);
   }
+  .bar h2 { font: inherit; margin: 0; }
   .pill {
     font-family: ui-monospace, SFMono-Regular, monospace; font-size: .72rem;
     padding: .18rem .5rem; border-radius: 4px; background: #0d131c; border: 1px solid var(--edge);
@@ -102,7 +127,7 @@
   .pill.warn { color: var(--warn); border-color: #3a3320; }
   .pill.bad  { color: var(--bad);  border-color: #3a2222; }
 
-  .log { flex: 1; overflow-y: auto; padding: 1.1rem; display: flex; flex-direction: column; gap: .9rem; }
+  .log { flex: 1; min-height: 0; overflow-y: auto; padding: 1.1rem; display: flex; flex-direction: column; gap: .9rem; }
   .turn { display: flex; flex-direction: column; gap: .25rem; }
   .who { font-size: .68rem; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
   .said { font-size: .92rem; }
@@ -112,58 +137,194 @@
     border-left: 2px solid var(--edge); padding-left: .6rem; margin-top: .2rem;
   }
   .empty { color: var(--dim); font-size: .86rem; }
+
+  /* Typed questions work in every browser, with or without a microphone, and the box
+     stays in reach however long the conversation gets. */
+  .ask {
+    display: flex; flex-wrap: wrap; gap: .5rem; align-items: center;
+    padding: .8rem 1.1rem 1rem; border-top: 1px solid var(--edge); background: var(--panel);
+  }
+  .ask label { flex-basis: 100%; font-size: .8rem; color: var(--dim); }
+  .ask input {
+    flex: 1; min-width: 0; font: inherit; padding: .6rem .8rem; border-radius: 8px;
+    border: 1px solid #3a4a60; background: #0d131c; color: var(--ink);
+  }
+  .ask input::placeholder { color: #7d8ba0; }
+  .ask button { padding: .6rem 1.2rem; }
+  .narrow-only { display: none; }
+  @media (max-width: 860px) {
+    .ask { position: sticky; bottom: 0; }
+    /* Clear the sticky box when the page scrolls to the newest turn. */
+    .turn { scroll-margin-bottom: 8rem; }
+    /* One voice button at a time: the one that stays in reach. */
+    .narrow-only { display: inline-block; }
+    .controls #talk { display: none; }
+  }
 </style>
 </head>
 <body>
 
-<main class="device">
-  <div class="puck" id="puck" data-state="idle">
-    <div class="ring"></div>
-    <div class="label">
-      Landmark
-      <strong id="status">Connecting…</strong>
+<main class="app">
+  <section class="device" aria-label="Voice">
+    <div class="puck" id="puck" data-state="idle">
+      <div class="ring" aria-hidden="true"></div>
+      <div class="label">
+        <h1>Landmark</h1>
+        <!-- Visual only. As a live region it was read out on every change — "Listening"
+             just as the microphone opened, where the reader's own voice could be heard as
+             the question, then "Working", "Ready" and "Speaking" around every answer. The
+             tones say when to talk; problems and answers have regions of their own. -->
+        <span class="status" id="status" aria-live="off">Connecting…</span>
+      </div>
     </div>
-  </div>
 
-  <div class="controls">
-    <button id="talk" disabled>Hold to ask</button>
-    <button id="stop" class="ghost">Interrupt</button>
-  </div>
+    <!-- What the recogniser is hearing, as it hears it. Visual only: a screen reader
+         would read every partial guess aloud over the person still talking. -->
+    <p class="heard" id="heard" aria-hidden="true"></p>
 
-  <p class="hint" id="hint">
-    Try: <code>what do I have</code> · <code>describe it</code> ·
-    <code>what's the total revenue</code> · <code>how do you know</code>
-  </p>
+    <div class="controls">
+      <button id="talk" type="button" disabled>Ask by voice</button>
+      <button id="stop" type="button" class="ghost">Interrupt</button>
+    </div>
+
+    <label class="toggle"><input type="checkbox" id="speak-answers" checked> Speak answers</label>
+
+    <p class="hint" id="hint">
+      Press <strong>Ask by voice</strong> or Space, wait for the tone, then speak. Esc stops.
+      Using a screen reader? Turn off <strong>Speak answers</strong> and it will read each answer to you.
+      Try: <code>what's in the budget file</code> · <code>total amount for engineering</code> ·
+      <code>how do you know</code> · <code>break it down</code>
+    </p>
+  </section>
+
+  <section class="panel" aria-labelledby="conversation-title">
+    <div class="bar">
+      <h2 id="conversation-title">Conversation</h2>
+      <span class="pill" id="proto">protocol —</span>
+      <span class="pill" id="tools">— tools</span>
+      <span class="pill" id="latency">— ms</span>
+    </div>
+    <!-- A log, but not announced: answers already reach the listener once, aloud or
+         through the live region below, and announcing the log too would say each twice. -->
+    <div class="log" id="log" role="log" aria-live="off" aria-labelledby="conversation-title" tabindex="0">
+      <p class="empty">Every answer below comes from the MCP server over Streamable HTTP. A line marked "no call" reuses what the server already said.</p>
+    </div>
+    <form class="ask" id="ask">
+      <label for="question">Type a question</label>
+      <!-- On a phone the page scrolls to each new answer, and the voice button above
+           scrolled off the top with it. This one stays in reach with the text box; it
+           is hidden on wider screens, where the one above is always in view. -->
+      <button type="button" id="talk-here" class="ghost narrow-only" disabled>Ask by voice</button>
+      <input id="question" name="question" type="text" autocomplete="off" enterkeyhint="send"
+             placeholder="total amount for engineering">
+      <button type="submit">Ask</button>
+    </form>
+  </section>
+
+  <!-- Where answers and problems go when Speak answers is off, so the person's own
+       screen reader or braille display presents them in their own voice and pace. -->
+  <div class="sr-only" id="announce" aria-live="polite" aria-atomic="true"></div>
+  <div class="sr-only" id="alert" role="alert" aria-atomic="true"></div>
 </main>
 
-<aside>
-  <div class="bar">
-    <span>Session</span>
-    <span class="pill" id="proto">protocol —</span>
-    <span class="pill" id="tools">— tools</span>
-    <span class="pill" id="latency">— ms</span>
-  </div>
-  <div class="log" id="log">
-    <p class="empty">Every line below is a real MCP call over Streamable HTTP. Nothing is cached locally.</p>
-  </div>
-</aside>
-
 <script type="module">
-import { McpClient, Voice, route, absorb, loadCatalogue, context } from './app.js';
+import { McpClient, Voice, converse, loadCatalogue, context } from './app.js';
 
 const el = (id) => document.getElementById(id);
-const puck = el('puck'), status = el('status'), log = el('log');
-const talk = el('talk'), stop = el('stop');
+const puck = el('puck'), status = el('status'), log = el('log'), heard = el('heard');
+const talk = el('talk'), stop = el('stop'), form = el('ask'), question = el('question');
+const talkHere = el('talk-here');
+/** The voice button in view: the one by the text box on a phone, the one under the ring otherwise. */
+const visibleTalk = () => (talkHere.offsetParent !== null ? talkHere : talk);
+function enableTalk() {
+  talk.disabled = false;
+  talkHere.disabled = false;
+}
+const speakBox = el('speak-answers');
 
 const client = new McpClient();
 const voice = new Voice();
 
-const STATUS = { idle: 'Ready', listening: 'Listening…', thinking: 'Working…', speaking: 'Speaking', error: 'Say again?' };
+// ── speak answers, or leave them to the screen reader ─────────────────────
+//
+// On by default so the page behaves as it always has. A screen-reader user turns it
+// off: a second synthetic voice talking over NVDA or VoiceOver, at a rate they did not
+// choose, is worse than none, and a braille display never received the answers at all.
+const SPEAK_KEY = 'landmark-speak-answers';
+let speakAnswers = true;
+try {
+  speakAnswers = localStorage.getItem(SPEAK_KEY) !== 'off';
+} catch {
+  // Storage refused: stay on the default.
+}
+speakBox.checked = speakAnswers;
+speakBox.addEventListener('change', () => {
+  speakAnswers = speakBox.checked;
+  try {
+    localStorage.setItem(SPEAK_KEY, speakAnswers ? 'on' : 'off');
+  } catch {
+    // Remembered for this page only.
+  }
+  if (!speakAnswers) {
+    // Whatever was owed or cut off goes to their own reader instead of vanishing: the
+    // first thing a screen-reader user hearing nothing does is find this box.
+    const text = owed ?? saying;
+    owed = null;
+    voice.stopSpeaking();
+    if (text) announce(text);
+  }
+});
+
+// ── display state ──────────────────────────────────────────────────────────
+const STATUS = { idle: 'Ready', listening: 'Listening…', thinking: 'Working…', speaking: 'Speaking', offline: 'Offline' };
 function setState(s) {
+  const was = puck.dataset.state;
   puck.dataset.state = s;
   status.textContent = STATUS[s] ?? s;
+  // The ring is not enough: someone who cannot see it needs to hear when to start
+  // talking and when the microphone has closed.
+  if (s === 'listening' && was !== 'listening') tone(true);
+  if (was === 'listening' && s !== 'listening') {
+    tone(false);
+    heard.textContent = '';
+  }
 }
 
+// ── earcons ────────────────────────────────────────────────────────────────
+// Created on the first press, since an audio context made before any gesture starts
+// suspended and stays silent.
+let audio = null;
+function wakeAudio() {
+  try {
+    const Context = window.AudioContext ?? window.webkitAudioContext;
+    if (!Context) return;
+    audio ??= new Context();
+    if (audio.state === 'suspended') audio.resume().catch(() => {});
+  } catch {
+    audio = null;
+  }
+}
+function tone(rising) {
+  if (!audio) return;
+  try {
+    const t = audio.currentTime;
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(rising ? 620 : 880, t);
+    osc.frequency.linearRampToValueAtTime(rising ? 880 : 620, t + 0.12);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    osc.connect(gain).connect(audio.destination);
+    osc.start(t);
+    osc.stop(t + 0.18);
+  } catch {
+    // A missing beep is not worth failing a turn over.
+  }
+}
+
+// ── the conversation panel ─────────────────────────────────────────────────
 function addTurn(who, said, meta) {
   const wrap = document.createElement('div');
   wrap.className = `turn ${who === 'You' ? 'you' : ''}`;
@@ -176,7 +337,8 @@ function addTurn(who, said, meta) {
   }
   log.querySelector('.empty')?.remove();
   log.append(wrap);
-  log.scrollTop = log.scrollHeight;
+  // Inside the panel on a wide screen, on the page itself on a narrow one.
+  wrap.scrollIntoView({ block: 'nearest' });
 }
 
 function showLatency(ms) {
@@ -185,14 +347,31 @@ function showLatency(ms) {
   pill.className = `pill ${ms < 200 ? 'good' : ms < 500 ? 'warn' : 'bad'}`;
 }
 
+/** Hand text to the person's own screen reader. Problems interrupt; answers wait their turn. */
+function announce(text, urgent = false) {
+  const region = el(urgent ? 'alert' : 'announce');
+  region.textContent = '';
+  // Readers do not reliably re-read a region whose text did not change, so clear it
+  // and write on the next tick.
+  setTimeout(() => { region.textContent = text; }, 60);
+}
+
+// ── speaking ───────────────────────────────────────────────────────────────
+
+/** A sentence we were not allowed to say yet, kept for the first click or key press. */
+let owed = null;
+/** The sentence being spoken right now, if any. */
+let saying = null;
+
 /**
  * Speak, and settle when the voice actually stops.
  *
  * The scripted demo used to wait a flat 400 ms between lines, which is shorter than
  * every sentence this server produces: each new line called speak(), speak() cancels
  * whatever is talking, and the demo cut itself off mid-word from the second line on.
- * The guard timer is only there so a dropped end event — Chrome does this on long
- * utterances — stalls the script rather than hanging it forever.
+ * The end and error events now settle every ordinary case, including an interrupted
+ * one. The guard is only for a dropped event — Chrome does this on long utterances —
+ * and is generous, because a guard shorter than the speech cut the next line in.
  */
 function speakAndSettle(text) {
   return new Promise((resolve) => {
@@ -200,56 +379,124 @@ function speakAndSettle(text) {
     const finish = () => {
       if (settled) return;
       settled = true;
+      clearTimeout(guard);
       resolve();
     };
-    const guard = setTimeout(finish, Math.max(5000, text.length * 120));
+    const guard = setTimeout(finish, Math.max(8000, text.length * 200));
     try {
-      voice.speak(text, () => {
-        clearTimeout(guard);
+      voice.speak(text, (error) => {
+        // Chrome refuses speech before the page has had a click or a key press, so the
+        // opening answer was silent for every first visitor. Say it on the first one.
+        if (error === 'not-allowed') owed = text;
         finish();
       });
     } catch {
-      clearTimeout(guard);
       finish();
     }
   });
 }
 
-/** One turn: route the utterance, call the tool, speak the server's sentence. */
-async function handle(said) {
+/** Say something in the way this person asked for: aloud, or through their screen reader. */
+async function respond(text, { urgent = false } = {}) {
+  if (!speakAnswers || !voice.canSpeak) {
+    // Ready before the answer, so the status change does not land on top of it.
+    if (puck.dataset.state !== 'offline') setState('idle');
+    announce(text, urgent);
+    return;
+  }
+  setState('speaking');
+  saying = text;
+  try {
+    await speakAndSettle(text);
+  } finally {
+    if (saying === text) saying = null;
+  }
+}
+
+// ── turns ──────────────────────────────────────────────────────────────────
+//
+// Each question, notice or interruption takes a new turn number. Only the latest turn
+// may speak, and only it may put the ring back to idle when it finishes. The ring used
+// to stay on "Speaking" forever after the first answer, because speech ending was
+// ignored unless the state was "listening"; and a bare "set idle when done" blanked it
+// in the middle of a later answer whenever an earlier one was cut off.
+let turnSeq = 0;
+
+async function aside(text, urgent = false) {
+  const turn = ++turnSeq;
+  try {
+    await respond(text, { urgent });
+  } finally {
+    if (turn === turnSeq && puck.dataset.state === 'speaking') setState('idle');
+  }
+}
+
+/** A problem: shown, and said or announced, always with what to do next. */
+function notice(message, meta) {
+  addTurn('Landmark', message, meta);
+  return aside(message, true);
+}
+
+const callTool = async (name, args) => {
+  const payload = await client.call(name, args);
+  showLatency(client.lastLatencyMs);
+  return payload;
+};
+
+/** One turn: route the utterance, call the tools, say the server's sentence. */
+async function handle(said, confidence) {
+  const turn = ++turnSeq;
+  try {
+    await takeTurn(said, turn, confidence);
+  } finally {
+    if (turn === turnSeq && (puck.dataset.state === 'speaking' || puck.dataset.state === 'thinking')) {
+      setState('idle');
+    }
+  }
+}
+
+async function takeTurn(said, turn, confidence) {
   addTurn('You', said);
   setState('thinking');
 
-  const plan = route(said);
-  if (plan.speak) {
-    setState('speaking');
-    addTurn('Landmark', plan.speak, 'no call — needed more from you first');
-    await speakAndSettle(plan.speak);
+  let result;
+  try {
+    await connected();
+    result = await converse(said, callTool);
+  } catch (err) {
+    if (turn !== turnSeq) return;
+    addTurn('Landmark', `Something went wrong reaching the table. ${err.message}`, 'transport error');
+    await respond('Something went wrong reaching the table. Check your connection, then ask again.', { urgent: true });
     return;
   }
 
-  try {
-    const payload = await client.call(plan.tool, plan.args);
-    showLatency(client.lastLatencyMs);
-    absorb(plan.tool, plan.args, payload);
-
-    const spoken = payload.spoken ?? 'I could not put that into words.';
-    const detail = [
-      plan.tool,
-      `${client.lastLatencyMs} ms`,
-      payload.answer_id ? `answer ${payload.answer_id}` : null,
-      payload.more_available ? 'more available — say "more"' : null,
-    ].filter(Boolean).join(' · ');
-
-    addTurn('Landmark', spoken, detail);
-    setState('speaking');
-    await speakAndSettle(spoken);
-  } catch (err) {
-    const message = `Something went wrong reaching the table. ${err.message}`;
-    addTurn('Landmark', message, 'transport error');
-    setState('speaking');
-    await speakAndSettle('Something went wrong reaching the table. Try again in a moment.');
+  // Said as Escape: stop, and say nothing over whatever comes next.
+  if (result.plan?.interrupt) {
+    if (turn === turnSeq) interrupt();
+    return;
   }
+
+  // What actually happened, when no call was made: a question put back to them, or an
+  // answer from what the server already said (its catalogue, a column's values).
+  const local = context.pending ? 'no call — waiting on your reply' : 'no call — answered from what the server already sent';
+  const detail = [
+    result.calls.length ? result.calls.join(' → ') : local,
+    result.calls.length ? `${client.lastLatencyMs} ms` : null,
+    result.payload?.answer_id ? `answer ${result.payload.answer_id}` : null,
+    result.payload?.more_available ? 'more available — say "more"' : null,
+  ].filter(Boolean).join(' · ');
+
+  if (turn !== turnSeq) {
+    // Interrupted while the answer was on its way. Show it, but do not start talking
+    // over whatever they did next.
+    addTurn('Landmark', result.spoken, `${detail} · not spoken: interrupted`);
+    return;
+  }
+  addTurn('Landmark', result.spoken, detail);
+  // A shaky recognition is read back first, so a misheard question is heard as
+  // misheard rather than as a strange answer to something they never asked.
+  const echo = typeof confidence === 'number' && confidence > 0 && confidence < 0.5 ? `I heard: ${said}. ` : '';
+  await respond(echo + result.spoken);
 }
 
 /**
@@ -258,15 +505,15 @@ async function handle(said) {
  * microphone, and it is the fallback if speech recognition misbehaves while a demo
  * is being filmed. It drives exactly the same path a spoken utterance takes.
  *
- *   await landmark.ask("what's the total revenue")
- *   await landmark.script(["describe it", "total revenue", "how do you know"])
+ *   await landmark.ask("total amount for engineering")
+ *   await landmark.script(["what's in the budget file", "total amount for engineering", "how do you know"])
  */
 window.landmark = {
-  ask: handle,
+  ask: (said) => handle(said),
   async script(lines, gapMs = 250) {
     for (const line of lines) {
-      // handle() now resolves when the answer has finished being spoken, so this gap
-      // is a breath between turns rather than a bet on how long a sentence takes.
+      // handle() resolves when the answer has finished being spoken, so this gap is a
+      // breath between turns rather than a bet on how long a sentence takes.
       await handle(line);
       await new Promise((r) => setTimeout(r, gapMs));
     }
@@ -274,65 +521,160 @@ window.landmark = {
   get context() { return context; },
 };
 
-// ── speech wiring ──────────────────────────────────────────────────────────
-let interim = '';
+// ── listening ──────────────────────────────────────────────────────────────
+const PROBLEMS = {
+  'no-speech': "I didn't hear anything. Press Ask by voice, wait for the tone, then speak — or type your question in the box.",
+  'not-allowed': "I'm not allowed to use the microphone. Allow it from the address bar and press Ask by voice again, or type your question in the box.",
+  'service-not-allowed': "This browser won't let me listen here. Type your question in the box instead.",
+  'audio-capture': "I can't find a microphone. Check that one is connected, or type your question in the box.",
+  network: 'Speech recognition needs the network in this browser, and it could not reach it. Type your question in the box, or try again.',
+  'language-not-supported': "This browser can't listen in English here. Type your question in the box instead.",
+  'start-failed': "I couldn't start listening. Press Ask by voice again, or type your question in the box.",
+};
+const OTHER_PROBLEM = 'Listening stopped with an error. Press Ask by voice to try again, or type your question in the box.';
+
+function cannotListen() {
+  return voice.canSpeak
+    ? "This browser can't listen for speech, so type your questions in the box. Answers are still spoken."
+    : "This browser can't listen or speak, so type your questions in the box. Answers appear in the conversation.";
+}
+
 voice.onstate = (s) => { if (s !== 'idle' || puck.dataset.state === 'listening') setState(s); };
-voice.onheard = (text, final) => {
-  interim = text;
-  if (final && text) handle(text);
+voice.onheard = (text, final, confidence) => {
+  if (!final) {
+    heard.textContent = text;
+    return;
+  }
+  if (text) handle(text, confidence);
+};
+voice.onproblem = (code) => {
+  if (code === 'aborted') return; // we stopped it ourselves
+  notice(PROBLEMS[code] ?? OTHER_PROBLEM, `speech recognition: ${code}`);
 };
 
-talk.addEventListener('click', () => {
-  if (!voice.listen()) {
-    addTurn('Landmark', 'This browser has no speech recognition. Chrome does.', 'falling back to typing');
-    const typed = prompt('Ask a question:');
-    if (typed) handle(typed);
+function startListening() {
+  wakeAudio();
+  voice.prime();
+  if (!voice.canListen) {
+    notice(cannotListen(), 'no speech recognition in this browser');
+    question.focus();
+    return;
   }
+  turnSeq++; // a new question supersedes an answer still on its way
+  voice.listen();
+}
+talk.addEventListener('click', startListening);
+talkHere.addEventListener('click', startListening);
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = question.value.trim();
+  if (!text) {
+    question.focus();
+    return;
+  }
+  question.value = '';
+  handle(text);
 });
 
-stop.addEventListener('click', () => {
-  // Barge-in: a real voice user interrupts a long answer rather than waiting it out.
+function interrupt() {
+  // Barge-in: a real voice user interrupts a long answer rather than waiting it out,
+  // and nothing already on its way is spoken after they have asked for quiet.
+  turnSeq++;
+  owed = null;
   voice.stopSpeaking();
   voice.stopListening();
-  setState('idle');
+  if (puck.dataset.state !== 'offline') setState('idle');
+}
+
+stop.addEventListener('click', () => {
+  interrupt();
+  // So the next Space asks, rather than pressing Interrupt again.
+  if (!talk.disabled) visibleTalk().focus();
 });
 
-// Space bar as push-to-talk, so a demo can be driven without looking at the screen.
 document.addEventListener('keydown', (e) => {
-  if (e.code === 'Space' && !e.repeat && document.activeElement === document.body) {
-    e.preventDefault();
-    talk.click();
+  if (e.key === 'Escape') {
+    interrupt();
+    return;
   }
+  if (e.code !== 'Space' || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+  // Space belongs to whatever has focus when that is a control: a button presses, the
+  // checkbox toggles, the text box types a space, and the conversation log — focusable
+  // so it can be scrolled from the keyboard — scrolls. Anywhere else it asks, so the
+  // demo can be driven without looking at the screen.
+  const a = document.activeElement;
+  if (a && a !== document.body && a.closest('button, input, select, textarea, a[href], [contenteditable], [tabindex], [role=log]')) return;
+  e.preventDefault();
+  if (!talk.disabled) startListening();
 });
+
+// The first click or key press unlocks sound: iOS Safari will not speak otherwise, and
+// Chrome will not have spoken the opening answer. Say that answer now — unless the
+// press was the start of a question, or of turning speech off.
+function firstGesture(e) {
+  if (e.type === 'keydown' && e.key === 'Escape') return; // not a gesture a browser counts
+  document.removeEventListener('click', firstGesture, true);
+  document.removeEventListener('keydown', firstGesture, true);
+  wakeAudio();
+  voice.prime();
+  const target = e.target instanceof Element ? e.target : null;
+  // Turning speech off: its change handler, which runs after this, hands the owed
+  // sentence to the screen reader. Clearing it here first left that handler nothing,
+  // so a first-time screen-reader user who heard nothing and unticked the box still
+  // got nothing.
+  if (target?.closest('#speak-answers, .toggle')) return;
+  const text = owed;
+  owed = null;
+  if (!text) return;
+  if (target?.closest('#talk, #talk-here, #ask')) return;
+  if (e.type === 'keydown' && e.code === 'Space') return;
+  aside(text);
+}
+document.addEventListener('click', firstGesture, true);
+document.addEventListener('keydown', firstGesture, true);
 
 // ── connect ────────────────────────────────────────────────────────────────
-(async () => {
-  try {
+let connecting = null;
+/** Connect once; after a failure, the next question tries again rather than giving up. */
+function connected() {
+  connecting ??= (async () => {
     const info = await client.connect();
     el('proto').textContent = `protocol ${info.protocolVersion}`;
     el('proto').className = `pill ${info.protocolVersion === '2025-11-25' ? 'good' : 'bad'}`;
     el('tools').textContent = `${client.tools.length} tools`;
     showLatency(client.lastLatencyMs);
-    talk.disabled = false;
+    // Learn the whole catalogue before the first utterance, so naming a file works
+    // even when it sits past the first spoken page of five.
+    await loadCatalogue(callTool);
+    return info;
+  })().catch((err) => {
+    connecting = null;
+    throw err;
+  });
+  return connecting;
+}
+
+(async () => {
+  try {
+    const info = await connected();
+    enableTalk();
     setState('idle');
     addTurn(
       'Landmark',
       `Connected to ${info.serverInfo.name} ${info.serverInfo.version}.`,
       `${client.tools.length} tools · protocol ${info.protocolVersion}`,
     );
-    if (!voice.supported) {
-      addTurn('Landmark', 'Speech is unavailable in this browser; the buttons still work.', 'Chrome supports Web Speech');
-    }
-    // Learn the whole catalogue before the first utterance, so naming a file works
-    // even when it sits past the first spoken page of five.
-    await loadCatalogue((name, args) => client.call(name, args));
-
+    if (!voice.canListen) addTurn('Landmark', cannotListen(), 'Chrome, Edge and Safari can listen');
     // Open on something useful rather than an empty shell.
     await handle('what do I have');
   } catch (err) {
-    setState('error');
-    status.textContent = 'Offline';
+    // Still usable: the next question tries the connection again.
+    enableTalk();
+    setState('offline');
     addTurn('Landmark', `Could not reach the table service. ${err.message}`, 'is npm run serve running?');
+    await aside("I can't reach the table service. Check your connection and reload the page, or type a question to try again.", true);
+    setState('offline');
   }
 })();
 </script>

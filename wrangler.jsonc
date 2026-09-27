@@ -4,9 +4,11 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-01",
 
-  // Workers run V8 isolates, so there is no cold start to pay on the request path.
-  // That matters more than usual here: judging happens weeks after the last commit,
-  // and a free tier that sleeps would answer the first judge with a timeout.
+  // Workers run V8 isolates rather than containers, so there is no machine to boot and
+  // nothing sleeps: a fresh isolate starts in tens of milliseconds, not seconds. That
+  // matters more than usual here: judging happens weeks after the last commit, and a
+  // free tier that sleeps would answer the first judge with a timeout. Observability is
+  // on so the first request's CPU time can be checked against the free plan's 10 ms.
   "observability": { "enabled": true },
 
   // The voice client is served from the same origin as the MCP endpoint.
@@ -26,16 +28,43 @@
     "run_worker_first": ["/mcp", "/health"]
   },
 
-  // Bookmarks are the one piece of state that must survive an isolate being recycled.
-  // Without this binding the server still runs — it falls back to per-isolate memory,
-  // and GET /health reports "persistence": "memory" so the downgrade is visible rather
-  // than discovered when a saved place is gone. To turn persistence on:
+  // State, in SQLite-backed Durable Objects (src/state/):
   //
-  //   npx wrangler kv namespace create LANDMARK_KV
+  //   LANDMARK_STATE    one object per conversation, addressed by the session id the
+  //                     handler reads: structure corrections and bookmarks.
+  //   LANDMARK_ANSWERS  one object per answer, addressed by the answer's unguessable
+  //                     id, so "how do you know" can read back the cells from any
+  //                     conversation — including the next one, on a host that
+  //                     reconnects for every turn.
   //
-  // then paste the printed id below and uncomment. It is left commented because a
-  // placeholder id makes `wrangler deploy` fail outright, which is worse than memory.
-  // "kv_namespaces": [{ "binding": "LANDMARK_KV", "id": "<id from the command above>" }],
+  // Callers that send no session id share one in-memory session instead (server.ts).
+  //
+  // Not isolate memory: Workers route requests to any instance and evict instances at
+  // will, so an explanation or a correction kept there could vanish between two
+  // sentences. Not KV either: it is eventually consistent, caches a miss for about a
+  // minute, and the free plan allows 1,000 writes a day — one per question asked. A
+  // Durable Object is strongly consistent, and SQLite-backed ones are on the free plan.
+  //
+  // `wrangler deploy` creates the namespaces on first deploy; there is no id to paste.
+  // `exports` is the declarative form Cloudflare now recommends over `migrations`; the
+  // two are mutually exclusive, and a Worker deployed with `exports` stays on it.
+  // Without both bindings the server still runs on per-isolate memory, and GET /health
+  // reports "state": "this instance only" instead of "durable".
+  "durable_objects": {
+    "bindings": [
+      { "name": "LANDMARK_STATE", "class_name": "LandmarkState" },
+      { "name": "LANDMARK_ANSWERS", "class_name": "LandmarkAnswer" }
+    ]
+  },
+  "exports": {
+    "LandmarkState": { "type": "durable-object", "storage": "sqlite" },
+    "LandmarkAnswer": { "type": "durable-object", "storage": "sqlite" }
+  },
 
+  // The Worker's own origin is always allowed to call /mcp and any other browser
+  // Origin gets 403, as the transport specification requires. LANDMARK_ALLOWED_ORIGINS
+  // (comma-separated, exact origins) adds more; no CORS headers are sent, so it helps
+  // only a front end that does not need them. Requests with no Origin, which is how
+  // server-side MCP clients call, are always accepted.
   "vars": {}
 }

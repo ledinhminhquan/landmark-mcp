@@ -1,109 +1,304 @@
-# Friction log — evidence-qualified revision
+# Friction log
 
-Updated September 13, 2026, against Landmark commit `60dc1881e73f10d9c219f5eabb6fe3d5da69623d`.
+Updated September 27, 2026.
 
-This is a retrospective reconstruction from committed notes, code, saved reviews and explicitly dated local probes. It is not a contemporaneous diary. No time-to-hello-world measurements are available. Documentation observations are labelled separately from runtime attempts. Severity is our engineering assessment, not a vendor rating.
+This log is about other people's tools and documentation: where Amazon's Alexa+ documentation,
+the MCP TypeScript SDK, ExcelJS and npm made the work harder than it needed to be. Problems in
+our own code are not here; they are in [INTERNAL-FRICTION.md](INTERNAL-FRICTION.md), with what
+was fixed and the test that proves it.
 
-FL01–FL03 concern Amazon documentation that we read; FL04–FL07 concern third-party tools and our integration. We have not run the Alexa+ private toolkit, an Alexa simulator/device, or an AWS service. There is no claim of a production incident.
+How it was written: reconstructed from the repository's history, saved probe results and pages
+read on the dates given, not kept as a diary while building. Every Amazon entry was re-checked
+against the live page on September 27, 2026. Every tool entry has a local reproduction, dated.
+No time-to-hello-world was measured, so none is claimed. Severity is our own assessment of the
+effect on this project. We never ran the Alexa+ private toolkit, an Alexa simulator or device,
+or any AWS service; Amazon entries are documentation observations, not runtime failures.
 
-The optional bonus is discretionary and capped at 10%; it is not a guaranteed 10% component. Product feedback is required separately. [Official rules](https://amazonappdev2026.devpost.com/rules).
+Entries 1–5 concern Amazon documentation. Entries 6–10 concern the MCP TypeScript SDK,
+ExcelJS and npm. The friction-log bonus is optional and assessed by Amazon's review team
+([official rules](https://amazonappdev2026.devpost.com/rules)); if space is short, entries 1, 2,
+4 and 5 matter most. Related: [product feedback](PRODUCT-FEEDBACK.md),
+[feature requests](FEATURE-REQUESTS.md), [evidence and exclusions](FRICTION-EVIDENCE.md).
 
-For compact form space, prioritize FL01, FL02, FL03 and FL04, retaining their scope labels. See [feedback](PRODUCT-FEEDBACK.md), [requests](FEATURE-REQUESTS.md), [evidence and exclusions](FRICTION-EVIDENCE.md), and [internal application friction](INTERNAL-FRICTION.md). Our application defects are not attributed to Amazon.
+## 1. The Alexa+ lifecycle example uses a different protocol revision from the one supported
 
-## FL01 — Reconcile the Alexa+ lifecycle example with the supported revision
+**Task attempted.** Decide which MCP revision to implement and show. Owner: Amazon Alexa+
+documentation. Checked September 27, 2026, by reading the pages; no Alexa client was run.
 
-**Task attempted.** Determine the wire revision to demonstrate. Owner: Amazon Alexa+ documentation. Observation: documentation review on September 10–13, 2026; no Alexa client was run.
+**Steps taken.** Read the MCP Toolkit Overview (last updated Aug 3, 2026), then the Alexa+ MCP
+Client and App Lifecycle page (last updated Jul 10, 2026), and compared both with the hackathon
+requirement.
 
-**Steps taken.** Compare the Toolkit Overview, the lifecycle initialize request/response, and the hackathon requirement; check the local initialize assertion in `test/wire.test.ts:78`.
+**Expected vs actual.** Expected the worked initialize example to use the revision the overview
+names. The overview says "Alexa+ for Builders supports the 2025-11-25 version of the MCP
+specification." Both the initialize request and the initialize response on the lifecycle page
+carry `"protocolVersion": "2025-03-26"`, with no note saying why.
+[Overview](https://www.developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-overview.html);
+[lifecycle](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-client-lifecycle.html).
 
-**Expected vs actual.** Expected a consistent target or an explicit compatibility note. The overview identifies 2025-11-25, while both lifecycle examples still carry 2025-03-26. These can coexist as compatibility examples, but that purpose is not explained beside the payloads. [Overview](https://www.developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-overview.html); [lifecycle](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-client-lifecycle.html).
+**Severity rating.** Medium. It cost extra cross-checking of the one version the hackathon makes
+mandatory. No rejection or measured delay is claimed.
 
-**Severity rating.** Medium — required extra cross-checking of the compliance target. No rejection or measured delay is claimed.
+**Workaround used.** Pinned `@modelcontextprotocol/sdk` 1.30.0, whose latest revision is
+2025-11-25, and asserted a real 2025-11-25 initialize exchange in `test/wire.test.ts` ("negotiates
+exactly the revision the hackathon requires"). How Alexa+ itself negotiates is untested.
 
-**Workaround used.** Pin SDK 1.30.0 and assert a real 2025-11-25 initialize exchange. Treat the SDK fallback date as backwards compatibility, not the target. The local client exchange passed; Alexa negotiation remains untested.
+**Actionable suggestion.** Label each example payload with its revision, add a 2025-11-25
+request and response pair, and keep older examples only with a note saying what they are for.
 
-**Actionable suggestion.** Put a revision label beside each payload and add a 2025-11-25 request/response pair with an executable assertion. Retain older examples only with their compatibility purpose stated.
+## 2. The partner-only status of the Alexa+ tools is missing from the pages a developer lands on
 
-## FL02 — Determine the prerequisite for private Alexa+ tooling
+**Task attempted.** Find the route from the public documentation to an authorised local setup
+for the Alexa+ toolkit. Owner: Amazon Alexa+ onboarding documentation. A documentation
+walkthrough, re-checked September 27; no private package was installed.
 
-**Task attempted.** Find the path from public documentation to an authorized local development environment. Owner: Amazon Alexa+ onboarding documentation. This was a documentation walkthrough, not an attempted private-package installation.
+**Steps taken.** Read the MCP Toolkit Overview, then Set Up Your Development Environment
+through the AWS-account and private-registry steps, from Windows with Node 23 in Vietnam. Then
+read the hackathon FAQ.
 
-**Steps taken.** Read Toolkit Overview, then Set Up Your Development Environment through the AWS-account and scoped-registry steps, from a Windows/Node 23 development environment in Vietnam.
+**Expected vs actual.** Expected the first page to say whether an ordinary developer can get
+access at all. The overview says "The MCP Toolkit is available in the United States" and says
+nothing about partners. The setup page lists macOS and Ubuntu with Node 24 or later, and assumes
+"the AWS account that you provided to the Alexa Solutions Architect" before private CodeArtifact
+setup. The answer came from the hackathon FAQ instead: the tools "are in preview and available
+to select partners only - there is currently no way for hackathon participants to apply for or
+gain access", noting this is "sometimes missing from individual setup-guide pages, which has
+caused some confusion".
+[Setup](https://www.developer.amazon.com/docs/alexaplus/add-ons/set-up-your-development-environment.html);
+[FAQ](https://amazonappdev2026.devpost.com/details/faqs).
 
-**Expected vs actual.** Expected the first setup page to distinguish public MCP development from private-toolkit access. The overview states US availability; setup lists macOS/Ubuntu and Node 24+, and assumes an AWS account already supplied to an Alexa Solutions Architect before private CodeArtifact setup. We could not establish an applicable onboarding route from those instructions. This is not proof that every Vietnam account is rejected. [Setup](https://www.developer.amazon.com/docs/alexaplus/add-ons/set-up-your-development-environment.html).
+**Severity rating.** Medium for planning. It did not block the public MCP route. No failed login
+or support refusal is claimed.
 
-**Severity rating.** Medium for integration planning; no blocker to the independent MCP path. No failed login, CLI 404, elapsed onboarding time or support refusal is claimed.
+**Workaround used.** Built and tested a public MCP server with our own browser client. No AWS
+credentials, role assumption, private registry or Alexa simulator were used.
 
-**Workaround used.** Build and test the public MCP server with a custom browser client. No AWS credentials, role assumption, registry changes, private CLI or Alexa simulator were used.
+**Actionable suggestion.** Put the partner-only notice at the top of the overview and of every
+setup page, with how to request access, and point developers without access to the public MCP
+route.
 
-**Actionable suggestion.** Add a prerequisites gate at the top: access status, supported developer locations/OS, how to request access, and the public MCP route for entrants without toolkit access. Provide a harmless preflight that explains missing authorization before credential setup.
+## 3. Service-token scope guidance contradicts itself
 
-## FL03 — Resolve conflicting service-token scope guidance
+**Task attempted.** Understand the authorisation boundary before planning any private user
+data. Owner: Amazon Alexa+ authentication documentation. Documentation only, re-checked
+September 27; Landmark has no OAuth flow.
 
-**Task attempted.** Review authorization boundaries before planning private user data. Owner: Amazon Alexa+ authentication documentation. Documentation-only observation, September 10–13; Landmark has no implemented OAuth flow.
+**Steps taken.** Compared step 5 of the client-credentials runtime flow with the scope
+separation table and item 6 of the token endpoint requirements, all on the same page.
 
-**Steps taken.** Compare Client credentials runtime flow step 5 with Scope separation model and Token endpoint requirements item 6 on the same page.
+**Expected vs actual.** Expected one rule. Step 5 names `mcp:tools` and `mcp:resource`
+(singular) for a service token, while the separation table and the requirements reserve user
+scopes for `authorization_code` and allow service tokens only `mcp:service`.
+[Authentication](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-authentication.html).
 
-**Expected vs actual.** Expected one scope rule. Step 5 names mcp:tools and singular mcp:resource for a service token, while the separation table and requirements reserve user scopes for authorization_code and restrict service tokens to mcp:service. [Authentication](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-authentication.html).
+**Severity rating.** High for any future integration that touches private data. No live
+authorisation failure or data exposure was observed.
 
-**Severity rating.** High for a future private-data integration; no live authorization failure or data exposure was observed.
+**Workaround used.** Took the restrictive reading and postponed account linking. Landmark has
+no authentication at all, and its security notes say not to deploy private data publicly.
 
-**Workaround used.** A3 records the restrictive interpretation and postpones real account linking. No service token was granted user data access.
+**Actionable suggestion.** Align step 5 with the separation table, fix the
+`mcp:resource`/`mcp:resources` spelling, and add a negative test showing that a service token
+cannot call a user-specific tool.
 
-**Actionable suggestion.** Align step 5 with the separation table, correct the resource/resources spelling, and provide a negative test showing that a service token cannot invoke a user-specific tool.
+## 4. The requirements hold the add-on to its spoken reply; the design guide says it cannot write one
 
-## FL04 — Preserve a Streamable HTTP response until it is consumed
+**Task attempted.** Make answers that suit someone who is only listening, which is the whole
+point of Landmark, and find out how an MCP add-on controls what Alexa says. Owner: Amazon Alexa+
+design guide and Functional Requirements. Read September 27, 2026.
 
-**Task attempted.** Return an MCP tool result from a per-request Web-standard handler. Owner: our integration, with a documentation suggestion for the MCP TypeScript SDK maintainers. Historical log corroborated by a controlled local reproduction on September 13.
+**Steps taken.** Read Functional Requirements §2 and §9 (last updated Jul 21, 2026), then the
+design guide's "The Conversation Surface" and "Tools, Schema, and Data Design" pages (both last
+updated Jul 21, 2026).
 
-**Steps taken.** Use SDK 1.30.0, register delayed_echo with a 30 ms synthetic delay, connect a fresh transport, await handleRequest, then immediately close the transport. Repeat while keeping it open through body consumption, and with enableJsonResponse enabled. [Probe](feedback-evidence/probe.mjs).
+**Expected vs actual.** Expected the pages to agree on who writes the words Alexa speaks. The
+Functional Requirements, which "define what an add-on must deliver to pass certification", put
+spoken output on the add-on: "Surface no API codes, tool names, JSON, or internal IDs in any
+customer-facing response", "Present a maximum of 5 options", and the best practice "Keep voice
+responses under 30 seconds". Their example reads "The add-on responds: 'I found 3 Italian
+restaurants nearby…'". The design guide says the opposite: "You influence Alexa's response
+through the data you return, not by scripting it directly", and "You can't 'script' what Alexa
+says". No page says which part of a tool result Alexa's voice draws on (text content or
+`structuredContent`), whether a ready-made sentence is used as written or rephrased, or whether
+the server's `instructions` are read.
+[Functional Requirements](https://developer.amazon.com/docs/alexaplus/add-ons/functional-requirements.html);
+[The Conversation Surface](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-addon-conversation-surface.html);
+[Tools, Schema, and Data Design](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-addon-tools-schema-data-design.html).
 
-**Expected vs actual.** Expected the tool result to survive handler return. Premature close produced HTTP 200, text/event-stream, empty body. Keeping the transport open produced the SSE result; JSON mode also returned the result. Stateless deployment and SSE are compatible when lifetime is managed correctly. This was local, not a Cloudflare or Alexa outage. [Results](feedback-evidence/legacy-probe-results.json).
+**Severity rating.** Medium, and higher for voice-first and accessibility add-ons, whose value
+depends on the length and wording of what is heard.
 
-**Severity rating.** Medium — the original lifecycle pattern loses the response without an HTTP error. The 30 ms is a probe input, not a measured platform latency.
+**Workaround used.** Every Landmark result carries a `spoken` sentence already inside the
+limits (about 70 words at most, five items by default, no tool names or ids), and the structured data
+behind it. The server's instructions ask the host to say `spoken` as written. Our browser client
+does; whether Alexa+ would is unknown, since we cannot run it.
 
-**Workaround used.** The product already uses enableJsonResponse: true at `src/server.ts:115`. The probe verifies this response-lifetime workaround; it does not certify the whole server.
+**Actionable suggestion.** State which fields of a tool result Alexa's voice uses and whether a
+supplied sentence can be spoken as written. Then say how the voice requirements in §2 and §9
+are judged when Alexa composes the reply, and rewrite the "The add-on responds" examples to
+match.
 
-**Actionable suggestion.** Add a per-request Web Response example showing when cleanup is safe, including a delayed tool. Explain the JSON-response option for finite calls. Do not describe JSON as mandatory for all stateless deployments or treat close as an automatic flush.
+## 5. Accessibility checks can only be run on a device entrants cannot get
 
-## FL05 — Translate a wire JSON Schema into the SDK registration API
+**Task attempted.** Check Landmark against Amazon's own accessibility guidance before
+submitting. Owner: Amazon Alexa+ design guide. Read September 27, 2026.
 
-**Task attempted.** Register a tool from a schema initially expressed as JSON Schema. Owner: our SDK integration; low-priority API-onboarding feedback. The old log reported a type error; that original compiler output was not preserved.
+**Steps taken.** Read "Design Guide: Accessibility" and "Design Guide: Test Your Add-on
+Customer Experience" (both last updated Jul 21, 2026), then the hackathon FAQ on access.
 
-**Steps taken.** On September 13, call registerTool with a Zod raw shape, a z.object(), and a plain JSON Schema object using the installed SDK 1.30.0/Zod 3.25.76. Call the valid tools through Streamable HTTP. [Probe and results](feedback-evidence/legacy-probe-results.json).
+**Expected vs actual.** Expected a way to run at least part of the accessibility checklist
+without a device. The accessibility page ends: "Accessibility features must be tested on
+device." The test page's accessibility steps are device settings ("Go to Settings →
+Accessibility → VoiceView…", Captioning, Screen Magnifier, Color Correction), with "All steps
+apply to multimodal devices unless noted." The FAQ says hackathon participants cannot get the
+toolkit or the Web Simulator. For an entry built for blind and low-vision users, Amazon's own
+accessibility checks cannot be run.
+[Accessibility](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-addon-accessibility.html);
+[Test your add-on CX](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-addon-test-addon-cx.html).
 
-**Expected vs actual.** Expected to identify the accepted registration representation. Both Zod forms succeeded and returned the supplied value. Plain JSON Schema was rejected with a message explicitly requiring a Zod schema or raw shape. The old claims that z.object() is unsupported and runtime errors give no guidance are not supported.
+**Severity rating.** Medium for accessibility-focused entries; low for others.
 
-**Severity rating.** Low — a schema-adapter learning step, not a confirmed SDK defect.
+**Workaround used.** Applied the checks that need no device to our browser stand-in: the whole
+budget conversation works typed, without voice, through an always-visible text box, and every
+reply is spoken and pinned by a test (`test/demo.test.ts`), so it can be followed without
+looking; each listening tone comes with a visible status change. Speech recognition with a
+real microphone was not tried with this build, and VoiceView, captions and magnifier checks on
+a device were not run.
 
-**Workaround used.** Use the Zod schemas already present in `src/mcp/tools.ts`. Do not bypass the type checker to pass a wire schema.
+**Actionable suggestion.** Mark which accessibility checks can be done without a device (voice
+only, touch and keyboard only, without looking), and say how an entrant without toolkit access
+should show accessibility instead.
 
-**Actionable suggestion.** In a porting example, place a wire JSON Schema beside both valid registerTool inputs and explain the distinction. The runtime diagnostic already exists; do not request it as a missing feature.
+## 6. A Streamable HTTP response disappears if the transport is closed too early
 
-## FL06 — Retain merge provenance after ExcelJS expands cell values
+**Task attempted.** Return a tool result from a per-request, Web-standard handler. Owner: our
+integration, with a documentation suggestion for the MCP TypeScript SDK. Reproduced September
+13, 2026 with a local probe; the probe was re-run in a clean clone on September 27 with the
+same result.
 
-**Task attempted.** Preserve which values are inherited from a merge when building the speech index. Owner: our ingest adapter; feedback to spreadsheet-adapter authors. Historical code comments corroborated with ExcelJS 4.4.0 on September 13.
+**Steps taken.** With SDK 1.30.0, registered a tool with a 30 ms synthetic delay, connected a
+fresh transport, awaited `handleRequest`, then closed the transport straight away. Repeated
+with the transport kept open until the body was read, and with `enableJsonResponse: true`.
+[Probe](feedback-evidence/probe.mjs).
 
-**Steps taken.** Create an XLSX with A1:A3 merged and Engineering at A1; serialize and reload with ExcelJS. Inspect values, isMerged, master.address and worksheet.model.merges. [Results](feedback-evidence/legacy-probe-results.json).
+**Expected vs actual.** Expected the result to survive the handler returning. The early close
+produced HTTP 200, `text/event-stream`, and an empty body: no error anywhere. Keeping the
+transport open delivered the result over SSE; JSON mode delivered it too. This was local, not a
+Cloudflare or Alexa failure. [Results](feedback-evidence/legacy-probe-results.json).
 
-**Expected vs actual.** Expected value-only reads to distinguish anchors from covered cells. All three cells returned Engineering; their master was A1. The model merge list was an array. No second ExcelJS version or object-shaped model was verified. The accessibility provenance must therefore be retained separately from the returned value.
+**Severity rating.** Medium. The failure is silent. The 30 ms is a probe input, not a measured
+platform latency.
 
-**Severity rating.** Medium — value-only copying erases an explanation the product promises. This is an adapter issue, not evidence that ExcelJS computed the wrong value.
+**Workaround used.** Landmark answers with `enableJsonResponse: true` (`src/server.ts`), so the
+response is complete when `handleRequest` returns, and only then closes the transport, in a
+`finally`.
 
-**Workaround used.** Keep merge spans from `src/ingest/read.ts:94` and mark origin independently of whether a value needed filling in `src/table/header.ts:82`.
+**Actionable suggestion.** Add a per-request Web `Response` example with a delayed tool, showing
+when cleanup is safe, and explain that the JSON option suits finite calls. Do not present JSON
+as mandatory for stateless servers.
 
-**Actionable suggestion.** Provide a minimal ingest recipe carrying address, value, merge anchor and span together, plus a round-trip fixture. Prefer the public cell master/isMerged API where suitable. Do not claim undocumented multi-version behavior without named versions and reproductions.
+## 7. Arguments the schema refuses come back in a shape a voice host cannot use, with no supported hook
 
-## FL07 — Match TypeScript checking to Node strip-only execution
+**Task attempted.** Make every failure speakable: a voice host reads a `spoken` field, and a
+refusal with nothing to say leaves the listener in silence. Owner: MCP TypeScript SDK.
+Reproduced September 27, 2026 with SDK 1.30.0 and Zod 3.25.76 on Node 23.11.
 
-**Task attempted.** Run project TypeScript directly on Node 23.11.0. Owner: our toolchain configuration. Historical note corroborated on September 13.
+**Steps taken.** Registered a tool whose only argument is `z.string().max(5)`, called it with a
+longer string over Streamable HTTP, and read the result. Then looked for a way to shape that
+result.
 
-**Steps taken.** Import a minimal class with a constructor parameter property under --experimental-strip-types. Check the installed TypeScript version and whether its CLI accepts --erasableSyntaxOnly.
+**Expected vs actual.** Expected either the tool's own error shape or a hook to supply one. The
+SDK answers before any handler runs, with text only and no `structuredContent`:
+`{"content":[{"type":"text","text":"MCP error -32602: Input validation error: Invalid arguments
+for tool echo: String must contain at most 5 character(s) at value"}],"isError":true}`. The
+method that builds this, `createToolError`, is declared `private` in `server/mcp.d.ts`, so there
+is no supported way to change it. The same path answers a call to an unknown tool.
 
-**Expected vs actual.** Expected compile-time validation to catch syntax rejected by our runtime path. Node raised ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX; installed TypeScript 5.7.2 rejected --erasableSyntaxOnly as unknown. Node documentation already recommends TypeScript 5.8+ with that option. The old assertion that Node docs omit it is false. [Node documentation](https://nodejs.org/docs/latest-v23.x/api/typescript.html); [local results](feedback-evidence/legacy-probe-results.json).
+**Severity rating.** Medium for voice hosts. Our own browser client, which falls back to
+parsing the text as JSON when there is no structured result, throws on this reply.
 
-**Severity rating.** Low — known syntax/runtime mismatch, not a Node regression.
+**Workaround used.** `src/server.ts` replaces `createToolError` at runtime through a type cast
+and returns a spoken refusal with a next step. It depends on a private member and may break on
+an SDK upgrade; `test/integration.test.ts` ("arguments the schema refuses are spoken like any
+other failure") will catch that.
 
-**Workaround used.** The product declares QueryError.nextStep as a field and assigns it in the constructor (`src/query/engine.ts:87`). No compiler or runtime upgrade was installed in A7.
+**Actionable suggestion.** Offer a public option for shaping input-validation and unknown-tool
+errors, or pass them to a handler the server registers, so the result can carry
+`structuredContent` like any other tool error.
 
-**Actionable suggestion.** Add a project toolchain check pairing runtime and compiler capabilities. When upgrading, enable the documented erasable-syntax check on a supporting compiler and repeat runtime imports. Do not promise that adding the flag to TypeScript 5.7 fixes it.
+## 8. Registering a tool from a JSON Schema instead of Zod
+
+**Task attempted.** Register a tool whose input was first written as JSON Schema. Owner: our
+SDK integration; low-priority onboarding feedback for the SDK. Reproduced September 13 with
+SDK 1.30.0 and Zod 3.25.76; the earlier compiler output that prompted it was not kept.
+
+**Steps taken.** Called `registerTool` with a Zod raw shape, with `z.object()`, and with a plain
+JSON Schema object, then called the two valid tools over Streamable HTTP.
+[Results](feedback-evidence/legacy-probe-results.json).
+
+**Expected vs actual.** Expected to learn which form is accepted. Both Zod forms worked. The
+plain JSON Schema was refused with a message that says a Zod schema or raw shape is required.
+Earlier notes claiming `z.object()` is unsupported, or that the error gives no guidance, were
+wrong.
+
+**Severity rating.** Low. A learning step, not an SDK defect.
+
+**Workaround used.** Zod schemas throughout `src/mcp/tools.ts`.
+
+**Actionable suggestion.** In a porting guide, put a wire JSON Schema beside both accepted
+`registerTool` forms. The runtime message is already clear.
+
+## 9. ExcelJS gives every cell of a merge the same value, so provenance must be kept separately
+
+**Task attempted.** Keep track of which values were inherited from a merged cell, because
+Landmark tells a listener that "3 cells take their label from a merged block". Owner: our ingest
+adapter, with a documentation suggestion for spreadsheet-reading libraries. Reproduced
+September 13 with ExcelJS 4.4.0.
+
+**Steps taken.** Wrote a workbook with A1:A3 merged and "Engineering" in A1, saved and reloaded
+it with ExcelJS, and read each cell's value, `isMerged`, `master.address` and the sheet's merge
+list. [Results](feedback-evidence/legacy-probe-results.json).
+
+**Expected vs actual.** Expected a value read to tell the anchor from the covered cells. All
+three cells returned "Engineering", each with master A1; the merge list was an array of ranges.
+The value alone cannot say where it came from. No second ExcelJS version was tested.
+
+**Severity rating.** Medium for this project. ExcelJS computes nothing wrongly; a value-only
+copy just loses what we need to explain.
+
+**Workaround used.** `src/ingest/read.ts` keeps the merge ranges beside the grid, and
+`src/table/header.ts` records for every cell whether its value was written or inherited.
+
+**Actionable suggestion.** A short recipe in the documentation for carrying address, value,
+merge anchor and span together through an import, with a round-trip example.
+
+## 10. In PowerShell, `npm run x -- --flag value` loses the `--`, and npm keeps the flag
+
+**Task attempted.** Run the documented ingest command, which passes an output path after `--`,
+from PowerShell on Windows. Owner: npm's PowerShell shim (`npm.ps1`) and npm's documentation.
+Reproduced September 27, 2026 with PowerShell 7.6.6, npm 11.7.0 and Node 23.11.0 on Windows 11.
+
+**Steps taken.** Made a throwaway package whose script prints the arguments it receives and
+`npm_config_out`. Ran `npm run show -- a.xlsx --out b.json` in PowerShell, then with
+`--out=b.json`, then with the dash quoted (`'--'`), then through `npm.cmd`, and once in Git Bash.
+`Get-Command npm` resolves to `C:\Program Files\nodejs\npm.ps1`.
+
+**Expected vs actual.** Expected the script to receive `a.xlsx --out b.json`, as it does in Git
+Bash. In PowerShell the bare `--` never reaches npm, so npm reads `--out` as its own setting. It
+warns `Unknown cli config "--out"` and `"b.json" is being parsed as a normal command line
+argument`, and the script receives `["a.xlsx","b.json"]`. With `--out=b.json` the script
+receives only `["a.xlsx"]`, and the path turns up in the environment as `npm_config_out`. With
+`'--'` quoted, or through `npm.cmd`, all three arguments arrive.
+
+**Severity rating.** Medium for us. Before our fix, `npm run ingest -- <files> --out=<path>` in
+PowerShell ignored the path, overwrote the default `data/index.json`, which is the demo's own
+index, and exited 0.
+
+**Workaround used.** The ingest CLI now reads `npm_config_out` when npm kept the flag, and
+refuses, writing nothing, when a bare path shows npm took `--out` (`test/ingest-cli.test.ts`:
+"an --out that npm kept for itself still decides where the index goes"). Its message tells
+PowerShell users to quote the dash: `npm run ingest '--' <files> --out <path>`.
+
+**Actionable suggestion.** Have `npm.ps1` pass a bare `--` through to npm, or have npm's
+`run-script` documentation say that PowerShell users must quote it, and say in the warning that
+the flag was not passed to the script.

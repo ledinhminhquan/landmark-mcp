@@ -78,6 +78,11 @@ export interface ColumnProfile {
   /** Present only for low-cardinality columns, where listing them aloud is useful. */
   readonly categories?: readonly string[];
   readonly numeric?: NumericSummary;
+  /**
+   * The values are identifiers written in digits — phone numbers, postcodes, order
+   * numbers. Typed as text, and read back exactly as written, never as a quantity.
+   */
+  readonly identifier?: boolean;
   /** Column letter in the original sheet, for provenance. */
   readonly sheetColumn: string;
 }
@@ -181,6 +186,22 @@ export function toSpokenName(header: string, index: number): string {
     .map((w) => (w.length <= 3 && w === w.toUpperCase() ? w : w.toLowerCase()))
     .join(' ');
   return spoken.charAt(0).toUpperCase() + spoken.slice(1);
+}
+
+/**
+ * The two heading rows an Excel PivotTable writes for itself: its value ("Sum of
+ * Revenue") beside "Column Labels", over "Row Labels" and the column field's values
+ * (2023, 2024, 2025, Grand Total). Read as one heading row, the years became a record,
+ * "2024" named no column, and its total had the year itself added in.
+ */
+export function isPivotHeading(top: readonly unknown[], next: readonly unknown[]): boolean {
+  const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+  const value = top.map(text).find(Boolean) ?? '';
+  return (
+    /^(?:sum|count|average|max|min|product|stddev|stdevp?|var|varp|count numbers)\s+of\s+\S/i.test(value) &&
+    top.some((v) => /^column labels$/i.test(text(v))) &&
+    /^row labels$/i.test(next.map(text).find(Boolean) ?? '')
+  );
 }
 
 /** A short, speakable count phrase: avoids "1 rows". */

@@ -212,9 +212,11 @@ test('capWords cuts at a sentence boundary rather than mid-clause', () => {
 test('a numeric column that arrived as text is still spoken as a number', () => {
   // A CSV has no types. Inference correctly calls this column numbers, but the cell
   // holds the string "100352192" — read as text that is nine digits in a row, which
-  // is the exact experience this tool exists to replace.
-  assert.equal(speakCell('100352192', 'number'), '100.4 million');
-  assert.equal(speakCell(100352192, 'number'), '100.4 million');
+  // is the exact experience this tool exists to replace. Grouped, a speech engine
+  // reads it as one number; it is not rounded, because one record's value is read
+  // exactly (rounding made ids 104233 and 104239 sound identical).
+  assert.equal(speakCell('100352192', 'number'), '100,352,192');
+  assert.equal(speakCell(100352192, 'number'), '100,352,192');
   assert.equal(speakCell('4347', 'number'), '4347');
   // Currency reads as a bare number on purpose: SYMBOL.currency is empty because the
   // unit is ambiguous across the locales these files come from.

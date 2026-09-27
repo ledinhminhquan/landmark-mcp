@@ -55,6 +55,31 @@ export interface IndexColumn {
   readonly mean?: number;
   /** Values in a numeric column that could not be read as numbers. */
   readonly nonNumeric?: number;
+  /**
+   * Set only on a date column the file wrote day first ("15/01/2024"). Its cells are
+   * stored as ISO days, which no longer show the order, so a filter value written the
+   * file's way ("04/07/2026") is read with this rather than guessed month first.
+   */
+  readonly dateOrder?: 'dmy';
+  /**
+   * Set on a column of identifiers written in digits: `phone` for phone numbers, `code`
+   * for the rest. A phone number typed as "0912345678" has to find the 912345678 Excel
+   * stored, and neither kind is the name a row should be spoken by.
+   */
+  readonly identifier?: 'phone' | 'code';
+  /**
+   * Set when the column's numbers use the comma as their decimal point ("1.234,50",
+   * "45.000 ₫"), so a filter value written the same way ("30.000") is read that way
+   * too, rather than as thirty.
+   */
+  readonly numberConvention?: 'comma';
+  /**
+   * Said with any figure computed from this column, when how its numbers were read was
+   * a guess: "45.000" as forty-five or as forty-five thousand is a factor of a thousand
+   * the listener cannot catch, and a warning heard only in the description was missed
+   * by everyone who asked a question first.
+   */
+  readonly numberNote?: string;
 }
 
 /**
@@ -145,6 +170,14 @@ export interface IndexRegion {
   readonly labelColumn: number | null;
   /** Columns whose header path is not unique. */
   readonly ambiguousColumns: readonly number[];
+  /**
+   * Indices into `rows` of the sheet's own total and subtotal rows ("Total",
+   * "Subtotal", "Tổng cộng"). They are kept in `rows`, so addresses and row-by-row
+   * reading are unchanged, but column statistics exclude them and every count, sum,
+   * filter and grouping must skip them: summing a column that already contains its
+   * own total doubles the answer. Absent when there are none.
+   */
+  readonly summaryRows?: readonly number[];
 }
 
 export interface IndexTable {
@@ -196,17 +229,42 @@ export function assertIndex(value: unknown): asserts value is LandmarkIndex {
   }
 }
 
+function slug(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    // Vietnamese đ has no decomposition, so it would otherwise vanish from the id.
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+}
+
 /** Filename → stable, speakable id. "Q3 Sales (final).xlsx" → "q3-sales-final". */
 export function slugify(name: string): string {
-  return (
-    name
-      .replace(/\.[^.]+$/, '')
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-zA-Z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .toLowerCase() || 'table'
-  );
+  return slug(name.replace(/\.[^.]+$/, '')) || 'table';
+}
+
+/**
+ * Sheet name → id part. Unlike a filename, a sheet name has no extension: stripping
+ * one turned "Q1.2025" and "Q1.2026" into the same "q1", so a bookmark on one sheet
+ * resumed on the other and a correction to one silently re-read both.
+ */
+export function slugifySheet(name: string): string {
+  return slug(name) || 'sheet';
+}
+
+/**
+ * The first of `base`, `base-2`, `base-3` … not already in `used`, which it joins.
+ * Ids are how every tool call finds its target, so two things sharing one is a
+ * silent misroute, not a cosmetic clash.
+ */
+export function uniqueId(base: string, used: Set<string>): string {
+  let id = base;
+  for (let n = 2; used.has(id); n++) id = `${base}-${n}`;
+  used.add(id);
+  return id;
 }
 
 /** Filename → human title. "q3_sales_final.xlsx" → "Q3 sales final". */

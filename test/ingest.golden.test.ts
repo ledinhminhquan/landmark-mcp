@@ -106,7 +106,11 @@ test('06 csv — delimited path, and a trailing note is not swallowed into the t
   assert.equal(main.rowCount, 8, 'the source note below the blank line is not a data row');
   assert.equal(main.columns[1]!.kind, 'number');
   assert.equal(main.columns[3]!.kind, 'category');
-  assert.equal(t.regions.length, 2, 'the note becomes its own region rather than corrupting the table');
+  // The note used to become a one-cell "table", so this file announced itself as
+  // holding two separate tables. It is kept, as a note, where describe reports it.
+  assert.equal(t.regions.length, 1, 'a source line is a note, not a second table');
+  assert.ok(!t.warnings.some((w) => /separate tables/.test(w)));
+  assert.ok(t.warnings.some((w) => /Source: illustrative figures for testing only/.test(w)));
 });
 
 test('every column in every fixture is speakable', async () => {
