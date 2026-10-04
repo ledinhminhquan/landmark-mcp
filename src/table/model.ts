@@ -83,6 +83,13 @@ export interface ColumnProfile {
    * numbers. Typed as text, and read back exactly as written, never as a quantity.
    */
   readonly identifier?: boolean;
+  /**
+   * The column numbers the rows: "STT" over 1, 2, 3. Unlike other identifiers it stays
+   * a number column, so "items 1 to 5" compares 10 with 5 as numbers rather than as
+   * text ("10" sorts before "5"), but it has no `numeric` summary: a total of row
+   * numbers is never what anyone asked for.
+   */
+  readonly rowNumbers?: boolean;
   /** Column letter in the original sheet, for provenance. */
   readonly sheetColumn: string;
 }
@@ -202,6 +209,40 @@ export function isPivotHeading(top: readonly unknown[], next: readonly unknown[]
     top.some((v) => /^column labels$/i.test(text(v))) &&
     /^row labels$/i.test(next.map(text).find(Boolean) ?? '')
   );
+}
+
+/**
+ * One cell of the row a Vietnamese form writes under its headings to number its
+ * columns: "(1)", "(3=1+2)", "(3) = (1) + (2)", or a letter for a text column, "A".
+ * The number it gives the column, or the letter, or null for anything else.
+ */
+function columnNumber(v: unknown): number | string | null {
+  if (typeof v !== 'string') return null;
+  const t = v.trim();
+  if (/^[A-Z]$/.test(t) || /^\(\s*[A-Z]\s*\)$/.test(t)) return t.replace(/[()\s]/g, '');
+  const m = /^\(\s*(\d{1,2})\s*(?:\)\s*)?(?:=\s*[()\d\s+\-x×*/.]+)?\)?$/u.exec(t);
+  // Bracketed, whole: "(3)", "(3=1+2)", "(3)=(1)+(2)". A bare "3" is a figure.
+  if (!m || !t.startsWith('(') || (t.match(/\(/g) ?? []).length !== (t.match(/\)/g) ?? []).length) return null;
+  return Number(m[1]);
+}
+
+/**
+ * Is this the row that numbers a form's columns — "(1) | (2) | (3) | (4) | (5)", or
+ * "A | B | (1) | (2) | (3=1+2)" — rather than a record?
+ *
+ * A bracketed figure is an accounting negative, so "(45)" in a P&L is −45. Under a
+ * form's headings, though, "(1)" to "(5)" are labels, and read as figures that row
+ * became a record of negatives in every column. It is told apart as a row, not cell by
+ * cell: every filled cell is such a label, at least two are numbers, the numbers count
+ * up by one from left to right, and they fill at least half the row.
+ */
+export function isColumnNumbering(row: readonly unknown[]): boolean {
+  const filled = row.filter((v) => !(v === null || v === undefined || (typeof v === 'string' && v.trim() === '')));
+  if (filled.length < 2 || filled.length * 2 < row.length) return false;
+  const labels = filled.map(columnNumber);
+  if (labels.some((l) => l === null)) return false;
+  const numbers = labels.filter((l): l is number => typeof l === 'number');
+  return numbers.length >= 2 && numbers.every((n, k) => k === 0 || n === numbers[k - 1]! + 1);
 }
 
 /** A short, speakable count phrase: avoids "1 rows". */

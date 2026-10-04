@@ -1,7 +1,7 @@
 {
   "checkedAt": "2026-09-13T05:39:40.997Z",
   "node": "v23.11.0",
-  "scope": "A7 controlled probes, not a reconstruction of original build console output; no Alexa/cloud/microphone calls",
+  "scope": "September 13 controlled probes, not a reconstruction of original build console output; no Alexa/cloud/microphone calls",
   "versions": {
     "sdk": "1.30.0",
     "zod": "3.25.76",

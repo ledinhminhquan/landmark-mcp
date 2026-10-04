@@ -1,4 +1,4 @@
-// Local A7 probes. Uses only already-installed project dependencies; no network.
+// Local probes, first run September 13, 2026. Uses only already-installed project dependencies; no network.
 import { createRequire } from 'node:module';
 import { writeFile, appendFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
@@ -14,15 +14,15 @@ const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const bounded = (promise, label) => Promise.race([promise,wait(2000).then(()=>{throw new Error('Probe timeout: '+label);})]);
 const progress = new URL('./probe-progress.txt',import.meta.url);
 await writeFile(progress,`pid=${process.pid}\n`);
-const deadline=setTimeout(()=>{process.stderr.write('A7 probe global deadline\n');process.exit(2);},25000);
-const results = { checkedAt: new Date().toISOString(), node: process.version, scope: 'A7 controlled probes, not a reconstruction of original build console output; no Alexa/cloud/microphone calls', versions: { sdk: '1.30.0', zod: require('zod/package.json').version, exceljs: require('exceljs/package.json').version, typescript: require('typescript/package.json').version }, protocol: { LATEST_PROTOCOL_VERSION, DEFAULT_NEGOTIATED_PROTOCOL_VERSION } };
+const deadline=setTimeout(()=>{process.stderr.write('probe global deadline\n');process.exit(2);},25000);
+const results = { checkedAt: new Date().toISOString(), node: process.version, scope: 'September 13 controlled probes, not a reconstruction of original build console output; no Alexa/cloud/microphone calls', versions: { sdk: '1.30.0', zod: require('zod/package.json').version, exceljs: require('exceljs/package.json').version, typescript: require('typescript/package.json').version }, protocol: { LATEST_PROTOCOL_VERSION, DEFAULT_NEGOTIATED_PROTOCOL_VERSION } };
 function request(method, params) {
   return new Request('http://localhost/mcp', {method:'POST', headers:{'content-type':'application/json',accept:'application/json, text/event-stream','mcp-protocol-version':'2025-11-25'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})});
 }
 results.schemas = {};
 for (const [name, schema] of Object.entries({rawShape:{value:z.string()},zodObject:z.object({value:z.string()}),plainJsonSchema:{type:'object',properties:{value:{type:'string'}},required:['value']}})) {
   await appendFile(progress,'schema '+name+'\n');
-  const server = new McpServer({name:'a7-schema-probe',version:'1'});
+  const server = new McpServer({name:'schema-probe',version:'1'});
   const transport = new Transport({enableJsonResponse:true});
   try {
     server.registerTool('echo',{inputSchema:schema},async args=>({content:[{type:'text',text:JSON.stringify(args)}]}));
@@ -35,7 +35,7 @@ for (const [name, schema] of Object.entries({rawShape:{value:z.string()},zodObje
 results.streamLifetime = [];
 for (const options of [{json:false,closeEarly:true},{json:false,closeEarly:false},{json:true,closeEarly:true}]) {
   await appendFile(progress,'stream '+JSON.stringify(options)+'\n');
-  const server = new McpServer({name:'a7-stream-probe',version:'1'});
+  const server = new McpServer({name:'stream-probe',version:'1'});
   server.registerTool('delayed_echo',{inputSchema:{value:z.string()}},async({value})=>{await wait(30);return {content:[{type:'text',text:value}]};});
   const transport = new Transport({enableJsonResponse:options.json});
   await server.connect(transport);

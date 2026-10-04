@@ -414,10 +414,11 @@ export function createHandler(options: HandlerOptions): (request: Request) => Pr
       return rpcError(400, -32600, 'Session ids must be 1 to 128 visible ASCII characters.');
     }
 
-    // The body is read here, under a cap, rather than by the SDK, which reads whatever
-    // arrives. A single message only: the 2025-11-25 transport says a POST carries one
-    // JSON-RPC message, and the SDK would otherwise run a thousand calls from one
-    // request.
+    // The body is read here, under this server's own cap. The SDK has capped what it
+    // reads at 4 MiB since 1.30.1, but it skips that cap when it is handed a parsed body,
+    // as it is below, so this is the only limit. A single message only: the 2025-11-25
+    // transport says a POST carries one JSON-RPC message, and the SDK would otherwise run
+    // up to a hundred calls from one request.
     const text = await readCapped(request, MAX_BODY_BYTES);
     if (text === null) {
       return rpcError(413, -32600, `Request body is larger than ${MAX_BODY_BYTES} bytes.`);

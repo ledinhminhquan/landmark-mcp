@@ -119,6 +119,17 @@ export interface QueryResult {
   readonly winnerCount: number;
   /** The column the answer was broken down by, so its keys are spoken in its kind. */
   readonly groupColumn: IndexColumn | null;
+  /**
+   * How many groups a breakdown has in all, across every page. A cursor past the last
+   * of them used to come back as "There is no total. No matching row held a number" —
+   * a false statement about rows that held numbers and had all been read.
+   */
+  readonly groupCount: number;
+  /**
+   * Every group of a breakdown holds a single row, so each figure is that row's own
+   * value: "the highest GDP per capita" of one country is just its GDP per capita.
+   */
+  readonly oneRowEach: boolean;
   /** When nothing matched: the first filter that on its own matches no row at all. */
   readonly unmatched: { readonly column: IndexColumn; readonly op: FilterOp; readonly value: string | null } | null;
 }
@@ -717,6 +728,149 @@ function compare(cell: Cell, op: FilterOp, raw: string | undefined, col: IndexCo
 }
 
 // ---------------------------------------------------------------------------
+// Measures that do not add up
+// ---------------------------------------------------------------------------
+
+/** An amount over a stretch of time: rent per month across three flats is their rent per month. */
+const PER_TIME = /\bper\s+(?:hour|hr|day|night|shift|week|fortnight|month|quarter|year|annum)\b/g;
+
+/**
+ * A share of a whole: "Budget allocation (%)", "% of total", "Percent of spend". Its parts
+ * sum to the whole when the sheet is complete, which is exactly what someone checking an
+ * allocation asks, so a percentage like this one adds up.
+ */
+const SHARE = /\b(?:share|shares|portion|allocation|allocated|split|weight|weighting|ownership|owned|stake|stakes)\b|(?:%|\bper\s?cent|\bpercentage)\s+of\b/;
+/**
+ * The same in Vietnamese: "Tỷ trọng (%)" is a share of the whole, "Cơ cấu (%)" a breakdown
+ * of it. Neither was a share, so "what is the total tỷ trọng" was refused and its average,
+ * 33.33%, given in its place, where the shares add up to 100%.
+ */
+const SHARE_VN = /(?:^|[^\p{L}])(?:t[ỷỉ]\s+tr[ọo]ng|c[ơo]\s+c[ấa]u)(?![\p{L}])/u;
+
+/**
+ * A distance over a stretch of time is a speed, and the speeds of three cars add up to
+ * nothing. Checked before an amount per stretch of time is let through, which would
+ * otherwise let "km per hour" through with "rent per month".
+ */
+const SPEED =
+  /\b(?:speed|velocity|mph|kph|kmh|km\/h)\b|\b(?:km|kilomet(?:er|re)s?|miles?|met(?:er|re)s?|m|ft|feet|yards?)\s+(?:per|an?)\s+(?:hour|hr|h|minute|min|second|sec|s)\b/;
+
+/**
+ * What a figure "per" one of them is a figure per: a person, a unit, a kilo, a game. A
+ * total of them is a sum of averages — each row's figure is already divided by that row's
+ * own count — and means nothing. "Per region", "per team" and "per store" are not here:
+ * in a sheet with a row to each region the sales per region are the regions' sales, and
+ * their sum is the real total. Refusing them told a listener something false about their
+ * own sheet, and left no way to get the total at all.
+ */
+const PER_ONE = new Set([
+  'capita', 'head', 'person', 'people', 'individual', 'resident', 'inhabitant', 'citizen', 'adult', 'child',
+  'employee', 'worker', 'staff', 'fte', 'member', 'customer', 'client', 'user', 'patient', 'student', 'pupil',
+  'visitor', 'guest', 'subscriber', 'household', 'family', 'unit', 'item', 'piece', 'share', 'order',
+  'transaction', 'sale', 'visit', 'game', 'match', 'serving', 'dose', 'kg', 'kgs', 'kilo', 'kilogram', 'gram',
+  'lb', 'lbs', 'pound', 'ton', 'tonne', 'litre', 'liter', 'gallon', 'mile', 'km', 'kilometre', 'kilometer',
+  'metre', 'meter', 'acre', 'hectare', 'room', 'bed', 'seat', 'trip', 'call', 'click', 'impression', 'view',
+]);
+
+/** "Regions" as "region", "countries" as "country": enough to match a heading's own word. */
+function singular(w: string): string {
+  if (w.length > 4 && w.endsWith('ies')) return `${w.slice(0, -3)}y`;
+  if (/(?:ch|sh|x|ss)es$/.test(w)) return w.slice(0, -2);
+  if (w.length > 3 && /[^s]s$/.test(w)) return w.slice(0, -1);
+  return w;
+}
+
+/**
+ * The row is one of `word`: a text column in the same table is called that — "Region",
+ * "Store name", "Customer ID" — so a figure per one of them is each row's own figure.
+ */
+function rowsAre(region: IndexRegion, c: IndexColumn, word: string): boolean {
+  return region.columns.some((o) => {
+    if (o === c || (o.kind !== 'text' && o.kind !== 'category')) return false;
+    const called = columnName(o).toLowerCase().replace(/\s+(?:name|names|id|code|no|number)$/, '').trim();
+    return called !== '' && singular(called) === word;
+  });
+}
+
+/**
+ * Why adding a column up gives no total, as the end of "X is …", or null when it does.
+ *
+ * GDP per capita, a margin percentage, an average price: each row's figure is already a
+ * ratio over that row's own base, so their sum is a number that means nothing. "What is
+ * the total GDP of Asia" was answered "About 16.4 thousand. That is the total of GDP per
+ * capita across 3 rows" — the per-person figures of three countries added together,
+ * spoken as an answer.
+ *
+ * In order, because the first that applies is the reason given:
+ *   - an average, mean or median already is one, whatever else the heading says;
+ *   - a percentage has no total, unless it is a share of a whole ("Budget allocation
+ *     (%)", "% of total"), whose parts sum to the whole;
+ *   - a speed has none, though it is a distance per stretch of time;
+ *   - a heading that calls itself a rate or a ratio is one, whatever it is per: "Hourly
+ *     rate" and "Rate per hour" are refused alike;
+ *   - a figure per thousand of something ("Births per 1,000") is a rate, and one per
+ *     person, unit, kilo or game is an average over those (see PER_ONE).
+ * An amount per stretch of time adds up (the rent per month of every flat sums to the rent
+ * per month for all of them), and so does a figure per whatever each row is: "Sales per
+ * region" in a sheet with a Region column. `region`, when given, is what says what each
+ * row is; without it that last exemption is not made.
+ *
+ * Read from the heading, which is all there is to go on, and narrowly: "price" is not
+ * here, because a total price is an ordinary question where a total of GDP per capita
+ * is not. Only a total is refused; the average, highest and lowest of a rate all mean
+ * what they say.
+ */
+export function rateLike(c: IndexColumn, region?: IndexRegion): string | null {
+  const said = columnName(c).normalize('NFC').toLowerCase();
+  if (/\b(?:average|avg|mean)\b/.test(said)) return 'already an average';
+  if (/\bmedian\b/.test(said)) return 'already a median';
+  if (c.kind === 'percent' || /%|\bper\s?cent\b|\bpercentage\b/.test(said)) return SHARE.test(said) || SHARE_VN.test(said) ? null : 'a percentage';
+  if (SPEED.test(said)) return 'a speed';
+  const rate = /\b(rate|ratio)\b/.exec(said);
+  if (rate) return `a ${rate[1]}`;
+  // "Per 1,000 people" is said "per 1 000 people", and "per 1000" may end the heading.
+  const per = /\bper[\s-]+(?:(\d|hundred\b|thousand\b|million\b)|(\p{L}+))/u.exec(said.replace(PER_TIME, ' '));
+  if (!per) return null;
+  if (per[1]) return 'a rate';
+  const word = singular(per[2]!);
+  if (region && rowsAre(region, c, word)) return null;
+  if (PER_ONE.has(per[2]!)) return `a per-${per[2]} figure`;
+  return PER_ONE.has(word) ? `a per-${word} figure` : null;
+}
+
+/** Per one of these, a figure's total is never one: GDP per capita, spending per head. */
+const PER_HEAD = /^a per-(?:capita|head) figure$/;
+
+/**
+ * Whether a total of this column is refused outright, and why: the cases that cannot be a
+ * total whatever the rows are — a figure per capita or per head, a rate or a ratio, a
+ * speed, a median, a percentage that is not a share of a whole.
+ *
+ * The rest of rateLike's cases may well add up, and are answered when a total is asked
+ * for in so many words (see sumCaution): "Cost per person" over the days of a trip adds up
+ * to what the trip costs one person, 340, and "Average monthly spend" over the categories
+ * of a budget to the month's spending. Refused, and their average given instead under
+ * "cannot be added up into a total", the listener was told something false about their
+ * own sheet.
+ */
+export function noTotal(c: IndexColumn, region?: IndexRegion): string | null {
+  const why = rateLike(c, region);
+  return why && !sumCaution(c, region) ? why : null;
+}
+
+/**
+ * The word a total of this column is given with, where it may or may not be a real one:
+ * "already an average", "a per-person figure". Said after the figure — "That adds up Cost
+ * per person across 6 rows, each of them a per-person figure" — so the listener knows
+ * what was added.
+ */
+export function sumCaution(c: IndexColumn, region?: IndexRegion): string | null {
+  const why = rateLike(c, region);
+  if (why === 'already an average') return why;
+  return why && /^a per-[\p{L}-]+ figure$/u.test(why) && !PER_HEAD.test(why) ? why : null;
+}
+
+// ---------------------------------------------------------------------------
 // Execution
 // ---------------------------------------------------------------------------
 
@@ -823,7 +977,16 @@ export function runQuery(region: IndexRegion, spec: QuerySpec): QueryResult {
   const address = (dataRow: number, colIndex: number): string =>
     a1(region.firstDataRow + dataRow, region.firstCol + colIndex);
 
-  const common = { summarySkipped, unreadable, unmatched, winners: [] as number[], winnerCount: 0, groupColumn: null };
+  const common = {
+    summarySkipped,
+    unreadable,
+    unmatched,
+    winners: [] as number[],
+    winnerCount: 0,
+    groupColumn: null,
+    groupCount: 0,
+    oneRowEach: false,
+  };
 
   // ── no aggregate: return the rows themselves ────────────────────────────
   if (aggregate === 'none') {
@@ -904,6 +1067,8 @@ export function runQuery(region: IndexRegion, spec: QuerySpec): QueryResult {
     return {
       ...common,
       groupColumn: by,
+      groupCount: all.length,
+      oneRowEach: all.length > 0 && all.every((g) => g.rowCount === 1),
       result: matching.length,
       matchedRows: matching.length,
       rows: [],
@@ -928,13 +1093,21 @@ export function runQuery(region: IndexRegion, spec: QuerySpec): QueryResult {
   if (target.sum === undefined) {
     // In words a listener would use: "holds category" was the type's internal name,
     // and "cannot be totalled" was said of a highest or an average as well.
-    const holds = KIND_WORDS[target.kind] ?? target.kind;
+    // A row-number column ("STT" over 1, 2, 3) keeps its number kind and has no total:
+    // "holds number, so it cannot be totalled" said nothing a listener could follow.
+    const holds = target.identifier === 'row' ? 'numbers the rows' : `holds ${KIND_WORDS[target.kind] ?? target.kind}`;
     const cannot = { sum: 'be totalled', avg: 'be averaged', min: 'have a lowest number', max: 'have a highest number' }[aggregate];
     throw new QueryError(
-      `"${cleanText(columnName(target), 60)}" holds ${holds}, so it cannot ${cannot}.`,
+      `"${cleanText(columnName(target), 60)}" ${holds}, so it cannot ${cannot}.`,
       `Numeric columns here: ${nameList(numeric) || 'none'}.`,
     );
   }
+  // A total of a rate is refused (below, once the rows are bucketed) rather than answered
+  // with an average in its place: a host model that asked for a total and got an average
+  // back may well say "the total is", and the refusal's next step is one it can act on in
+  // the same turn. A caller that wants the average instead asks for it, and says to the
+  // listener that it did.
+  const why = aggregate === 'sum' ? noTotal(target, region) : null;
 
   const groupCol = spec.groupBy ? resolveColumn(region, spec.groupBy) : null;
 
@@ -959,6 +1132,18 @@ export function runQuery(region: IndexRegion, spec: QuerySpec): QueryResult {
     } else {
       buckets.set(key, { values: [n], rows: [i] });
     }
+  }
+  // Only where two or more figures would really be added together. A "total" of one
+  // row's GDP per capita is that row's figure, and a sum grouped one row to a group
+  // ("rank the countries by GDP per capita") adds nothing up: refused, the voice client's
+  // "lower than Thailand" (Thailand's own figure, looked up first) and every one-row
+  // ranking of a rate were told that "adding it up across rows gives no real total" —
+  // false of a question that added nothing — and went unanswered.
+  if (why && [...buckets.values()].some((b) => b.values.length > 1)) {
+    throw new QueryError(
+      `"${cleanText(columnName(target), 60)}" is ${why}, so adding it up across rows gives no real total.`,
+      'Ask for its average, highest or lowest instead.',
+    );
   }
 
   // Loops, not Math.min(...values): spreading a column into arguments overflows the
@@ -1017,6 +1202,8 @@ export function runQuery(region: IndexRegion, spec: QuerySpec): QueryResult {
   return {
     ...common,
     groupColumn: groupCol,
+    groupCount: all.length,
+    oneRowEach: all.length > 0 && all.every((g) => g.rowCount === 1),
     result: null,
     matchedRows: matching.length,
     rows: [],

@@ -25,6 +25,8 @@ import {
   matchColumns,
   OP_WORDS,
   QueryError,
+  noTotal,
+  rateLike,
   resolveColumn,
   rowLabel,
   runQuery,
@@ -35,14 +37,16 @@ import {
   type FilterOp,
 } from '../query/engine.ts';
 import {
+  answerAbout,
   capWords,
+  describeRegion,
   exactNumber,
   fitGroups,
   plural,
   queryNotes,
   speakAmount,
   speakCell,
-  speakDescribe,
+  speakColumnPage,
   speakError,
   speakExplain,
   speakList,
@@ -53,7 +57,7 @@ import {
   HEADLINE_WORD_LIMIT,
   SPOKEN_WORD_LIMIT,
 } from '../voice/speak.ts';
-import type { AnswerPart, Store } from './store.ts';
+import type { AnswerPart, Store, StoredAnswer } from './store.ts';
 import { materialise, type Materialised } from '../table/materialise.ts';
 import { MAX_HEADER_ROWS } from '../table/header.ts';
 import { EXPLAIN_UI_URI, uiMeta } from './widget.ts';
@@ -136,6 +140,18 @@ function safe<A>(doing: string, fn: (args: A) => Promise<ToolResult>): (args: A)
 }
 
 /**
+ * An answer's working, plus what the answer was in a few words — "690 thousand, the
+ * total of Amount for Salaries" — so an explanation asked for after other questions can
+ * say which answer it is about. Carried beside the stored fields, the way an index
+ * carries `summaryRows`: every store keeps the record whole, and an answer kept before
+ * this existed simply has none, and is described from its parts instead.
+ */
+type Kept = StoredAnswer & { readonly about?: string };
+
+/** Room for a measure, its figure and a condition or two, not twenty values said in full. */
+const ABOUT_CHARS = 120;
+
+/**
  * Keep an answer's working, or say it could not be kept.
  *
  * The answer has already been computed; failing to file its working — a Durable Object
@@ -143,7 +159,7 @@ function safe<A>(doing: string, fn: (args: A) => Promise<ToolResult>): (args: A)
  * well, and a question answered a moment earlier came back "Something went wrong". The
  * answer is given without an id instead, and "how do you know" says the working is gone.
  */
-async function keepAnswer(store: Store, answer: Parameters<Store['putAnswer']>[0]): Promise<string | null> {
+async function keepAnswer(store: Store, answer: Kept): Promise<string | null> {
   try {
     return await store.putAnswer(answer);
   } catch (e) {
@@ -154,6 +170,26 @@ async function keepAnswer(store: Store, answer: Parameters<Store['putAnswer']>[0
 
 /** Bounded text input: long enough for any real name, too short to carry a payload. */
 const text = (max = 200) => z.string().max(max);
+
+/**
+ * Where a continuation token says to pick up: never before the start, never past `end`.
+ *
+ * Tokens are this server's own, but a host model can make one up, or count on from one
+ * by itself. "-3" was handed back as "-3", so a host that followed it asked for the same
+ * page forever, and a listing said "Rows -2 to 2 of 8".
+ */
+function pageOffset(cursor: string | undefined, end = Number.POSITIVE_INFINITY): number {
+  const n = Number.parseInt(cursor ?? '0', 10);
+  return Number.isFinite(n) ? Math.min(Math.max(0, n), end) : 0;
+}
+
+/**
+ * A continuation token that is really there. Some hosts fill every optional string with
+ * "", and some copy the last call's arguments whole; neither is a request to read on.
+ */
+function continuing(cursor: string | undefined): cursor is string {
+  return cursor !== undefined && cursor.trim() !== '';
+}
 
 const SHEET_HELP =
   'Sheet name, or a table number such as "2" when the file holds several tables (the describe ' +
@@ -696,6 +732,31 @@ function conditionsSaid(region: IndexRegion, filters: readonly FilterArg[]): str
   return parts.length ? `For ${speakList(parts)}, ` : '';
 }
 
+/** The same conditions as the end of a phrase: " for South", or nothing. */
+function conditionsTail(region: IndexRegion, filters: readonly FilterArg[]): string {
+  const said = conditionsSaid(region, filters);
+  return said ? ` for ${said.slice('For '.length, -', '.length)}` : '';
+}
+
+/**
+ * What an answer was, for one kept before answers carried it: the measure without its
+ * figure, which is still enough to tell the total of Amount from the count before it.
+ */
+function aboutParts(parts: readonly AnswerPart[]): string {
+  const [first, second] = parts;
+  if (!first) return 'that answer';
+  if (second) return `${speakName(first.label)} against ${speakName(second.label)}`;
+  const name = speakName(first.label);
+  switch (first.aggregate) {
+    case 'sum': return `the total of ${name}`;
+    case 'avg': return `the average of ${name}`;
+    case 'max': return `the highest ${name}`;
+    case 'min': return `the lowest ${name}`;
+    case 'count': return 'the count of rows';
+    default: return 'the rows I read';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
@@ -719,11 +780,14 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     safe('listing the tables', async ({ cursor }) => {
-      const offset = Number.parseInt(cursor ?? '0', 10) || 0;
+      const offset = pageOffset(cursor, index.tables.length);
       const page = index.tables.slice(offset, offset + PAGE);
       const more = offset + page.length < index.tables.length;
 
       const remaining = index.tables.length - offset - page.length;
+      // "No tables loaded" is said only when that is true. A cursor at or past the end —
+      // one a host model made up, or counted on by itself — used to get it too, so
+      // someone with six spreadsheets was told confidently that they had none.
       const spoken = page.length
         ? capWords(
             `You have ${speakList(page.map((t) => cleanText(spokenTitle(t), 60)))}.` +
@@ -732,7 +796,9 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
               (more ? ` There ${remaining === 1 ? 'is 1 more' : `are ${remaining} more`}.` : ''),
             HEADLINE_WORD_LIMIT,
           )
-        : 'There are no tables loaded.';
+        : index.tables.length
+          ? `That is all of them: you have ${plural(index.tables.length, 'table')}.`
+          : 'There are no tables loaded.';
 
       return ok(spoken, {
         tables: page.map((t) => {
@@ -769,7 +835,9 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         'step that replaces glancing at a page to see what is on it. If the sheet has stacked or ' +
         'merged headings, this is where you learn the real column names. Never guess a column name — ' +
         'get it from here. When a file holds several tables, `regions` lists them; pass a table ' +
-        'number as `sheet` to open another.',
+        'number as `sheet` to open another. A wide table names its first columns and returns a ' +
+        'cursor; when they say more, or ask for the rest of the columns, call it again with that ' +
+        'cursor to read the next names.',
       inputSchema: {
         table_id: text().describe('Identifier from the list of tables, not the spoken title.'),
         sheet: text().optional().describe(SHEET_HELP),
@@ -780,17 +848,27 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
             "'brief' is one speakable sentence plus column names. Use 'full' only when they ask " +
               'for value ranges, gap counts, or how the headings are structured.',
           ),
+        cursor: text(20)
+          .optional()
+          .describe('Continuation token from a previous description: reads on through the column names.'),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    safe('describing that table', async ({ table_id, sheet, detail }) => {
+    safe('describing that table', async ({ table_id, sheet, detail, cursor }) => {
       const found = await located(index, store, table_id, sheet);
       if (isFailure(found)) return found;
       const { table, region, n } = found;
       const totals = summaryRowsOf(region);
 
-      const after = otherTables(table, n) + spokenWarnings(table, region);
-      return ok(speakDescribe(region, detail === 'full', after), {
+      // With a cursor, the reply is the next column names alone: the rest of the
+      // description was said the first time. Everything structured is the same either
+      // way, so a caller keeping the column list never loses it to a continuation. An
+      // empty cursor is no cursor: some hosts fill every optional string with "", and
+      // the whole description was then lost to a bare list of column names.
+      const said = continuing(cursor)
+        ? speakColumnPage(region, pageOffset(cursor))
+        : describeRegion(region, detail === 'full', otherTables(table, n) + spokenWarnings(table, region));
+      return ok(said.text, {
         table_id: table.id,
         sheet: region.sheet,
         title: region.title,
@@ -809,12 +887,17 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
           distinct: c.distinct,
           ...(c.categories ? { categories: c.categories } : {}),
           ...(c.min !== undefined ? { min: c.min, max: c.max, sum: c.sum } : {}),
+          // A number column whose total means nothing, and why, so a caller can ask for
+          // its average instead of being refused.
+          ...(c.sum !== undefined && noTotal(c, region) ? { no_total: noTotal(c, region) } : {}),
           source_column: c.col,
         })),
         sheets: [...new Set(table.regions.map((r) => r.sheet))],
         regions: regionList(table),
         warnings: table.warnings,
         ...structureFlags(region),
+        more_available: said.next !== null,
+        cursor: said.next === null ? null : String(said.next),
       });
     }),
   );
@@ -845,17 +928,79 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
             'How many rows at the top are headings. 0 means the table has none and every row is ' +
               'data. Omit to inspect without changing anything.',
           ),
+        cursor: text(20)
+          .optional()
+          .describe(
+            'Continuation token from a previous reply: reads on through the column names under the ' +
+              'current reading, and changes nothing. With a heading count that would change or first ' +
+              'confirm the reading, the count is applied and the cursor ignored.',
+          ),
       },
       annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
     },
-    safe('checking how that table is read', async ({ table_id, sheet, header_rows }) => {
+    safe('checking how that table is read', async ({ table_id, sheet, header_rows, cursor }) => {
       const found = await located(index, store, table_id, sheet);
       if (isFailure(found)) return found;
       const { table, region, original } = found;
-      const names = (cols: readonly IndexColumn[]): string => {
+      const SHOWN = 8;
+      const names = (cols: readonly IndexColumn[]): { listed: string; cut: boolean } => {
         const named = cols.filter((c) => c.path.length).map(columnName);
-        return speakList(named.length > 8 ? [...named.slice(0, 8), `${named.length - 8} more`] : named);
+        const cut = named.length > SHOWN;
+        return { listed: speakList(cut ? [...named.slice(0, SHOWN), `${named.length - SHOWN} more`] : named), cut };
       };
+      const SAY_COLUMNS = ' Say more to hear the columns.';
+      // The reply with its list of column names when that fits, and otherwise without the
+      // list but with how to hear it. Capped as one text, a table with long headings lost
+      // the list whole, and the reply handed back a cursor nobody was told to follow.
+      // "More" then picks up past the names said, or from the first if none were.
+      const fit = (
+        withNames: string,
+        withoutNames: string,
+        budget: number,
+        listed: boolean,
+        cut: boolean,
+      ): { spoken: string; resume: Structured } => {
+        if (!listed) return { spoken: capWords(withNames, budget), resume: { more_available: false, cursor: null } };
+        if (wordCount(withNames) <= budget) {
+          return {
+            spoken: withNames,
+            resume: cut ? { more_available: true, cursor: String(SHOWN) } : { more_available: false, cursor: null },
+          };
+        }
+        return {
+          spoken: capWords(withoutNames, budget - wordCount(SAY_COLUMNS)) + SAY_COLUMNS,
+          resume: { more_available: true, cursor: '0' },
+        };
+      };
+
+      // ── read on through the column names ──
+      //
+      // "More" after this reply used to answer "That was all of it" while 32 column names
+      // had not been said. A continuation reads them and changes nothing, even when the
+      // reply it continues was a correction: that correction is already in place, and
+      // "more" after it repeats the same heading count with the cursor.
+      //
+      // Only a real token that asks for no change continues. A heading count that differs
+      // from the reading in use, or confirms one not yet confirmed, is a correction
+      // whatever else comes with it: taken as a continuation, {header_rows: 1, cursor: ""}
+      // — an empty string from a host that fills every optional field, or the last call's
+      // arguments copied whole — read out column names and never wrote the correction,
+      // and the reply did not say so.
+      const asksChange =
+        header_rows !== undefined &&
+        !(header_rows === region.headerRows.length && region.structure.confirmedBy === 'user');
+      if (continuing(cursor) && !asksChange) {
+        const page = speakColumnPage(region, pageOffset(cursor));
+        return ok(page.text, {
+          table_id: table.id,
+          sheet: region.sheet,
+          header_rows: region.structure.chosen.headerRows,
+          data_rows: region.rowCount,
+          columns: region.columns.map((c) => c.spoken),
+          more_available: page.next !== null,
+          cursor: page.next === null ? null : String(page.next),
+        });
+      }
 
       // ── inspect ──
       if (header_rows === undefined) {
@@ -864,8 +1009,8 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
           s.chosen.headerRows === 0
             ? 'I am treating every row as data.'
             : `I am treating ${plural(s.chosen.headerRows, 'row')} as headings — ${s.chosen.why}.`;
-        const listed = names(region.columns);
-        const cols = listed ? ` That gives the columns ${listed}.` : '';
+        const { listed, cut } = names(region.columns);
+        const cols = listed ? ` That gives the columns ${listed}.${cut ? ' Say more for the rest.' : ''}` : '';
         // An empty list of alternatives used to be spoken as "I could instead ." —
         // a correction prompt that names no correction.
         const alts = s.alternatives.map((a) => a.why).filter((w) => w.trim());
@@ -875,7 +1020,8 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
           : s.confirmedBy === 'user'
             ? ' You confirmed this.'
             : '';
-        return ok(capWords(head + cols, SPOKEN_WORD_LIMIT - wordCount(doubt)) + doubt, {
+        const said = fit(head + cols, head, SPOKEN_WORD_LIMIT - wordCount(doubt), listed !== '', cut);
+        return ok(said.spoken + doubt, {
           table_id: table.id,
           sheet: region.sheet,
           header_rows: s.chosen.headerRows,
@@ -886,6 +1032,7 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
           revision: s.revision,
           alternatives: s.alternatives.map((a) => ({ header_rows: a.headerRows, why: a.why })),
           columns: region.columns.map((c) => c.spoken),
+          ...said.resume,
         });
       }
 
@@ -899,7 +1046,7 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
 
       const override = await store.putStructure(`${table.id}/${original.id}`, header_rows);
       const m = reread(original, header_rows);
-      const listed = names(m.columns);
+      const { listed, cut } = names(m.columns);
       const confirmed = header_rows === original.headerRows.length;
       // What it was read as a moment ago: the inference, or an earlier correction.
       const before = region.headerRows.length;
@@ -912,14 +1059,13 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         header_rows === before
           ? `Right — ${headings(header_rows)}, as I was already reading it.`
           : `Right — I now read ${headings(header_rows)} instead of ${headings(before)}.`;
-      const shape =
-        header_rows === 0
-          ? ` That gives ${plural(m.rowCount, 'row')} of data, and I will call the columns by position.`
-          : ` That gives ${plural(m.rowCount, 'row')} of data` + (listed ? `, with the columns ${listed}.` : '.');
+      const listing = header_rows === 0 || !listed ? '' : `, with the columns ${listed}.${cut ? ' Say more for the rest.' : ''}`;
+      const rows = ` That gives ${plural(m.rowCount, 'row')} of data`;
+      const shape = header_rows === 0 ? `${rows}, and I will call the columns by position.` : rows + (listing || '.');
       const lasting = confirmed ? ' I will stop asking.' : ' That holds for the rest of this conversation.';
-      const spoken = capWords(change + shape, SPOKEN_WORD_LIMIT - wordCount(lasting)) + lasting;
+      const said = fit(change + shape, `${change}${rows}.`, SPOKEN_WORD_LIMIT - wordCount(lasting), listing !== '', cut);
 
-      return ok(spoken, {
+      return ok(said.spoken + lasting, {
         table_id: table.id,
         sheet: region.sheet,
         header_rows,
@@ -931,6 +1077,7 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         columns: m.columns.map((c) => c.spoken),
         // Confirming the reading already in use changes no answer given under it.
         ...(confirmed ? {} : { note: 'Answers given before this correction were computed under the previous reading.' }),
+        ...said.resume,
       });
     }),
   );
@@ -955,7 +1102,11 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         aggregate: z
           .enum(['none', 'count', 'sum', 'avg', 'min', 'max'])
           .default('none')
-          .describe("Use 'none' to return the matching rows themselves."),
+          .describe(
+            "Use 'none' to return the matching rows themselves. A percentage, a rate or a figure per " +
+              "capita has no total (the description marks it no_total), so 'sum' of one is refused: use " +
+              "'avg'. A 'sum' of figures that are each an average or per person is given, and said to add them up.",
+          ),
         aggregate_column: text()
           .optional()
           .describe("Numeric column to aggregate. Required unless the aggregate is 'none' or 'count'."),
@@ -966,8 +1117,9 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
           .enum(['desc', 'asc'])
           .default('desc')
           .describe(
-            "Which end of a breakdown comes first. 'asc' for lowest, least or smallest questions, so the " +
-              'answer starts with it however many groups there are.',
+            "Which end of a breakdown comes first. 'asc' for lowest, least, smallest or fewest questions " +
+              'and for "from lowest to highest", whether each group\'s figure is a total, an average or a ' +
+              'count, so the answer starts with the lowest however many groups there are.',
           ),
         limit: z
           .number()
@@ -985,7 +1137,7 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
       if (isFailure(found)) return found;
       const { table, region } = found;
       const aggregate = args.aggregate as Aggregate;
-      const offset = Number.parseInt(args.cursor ?? '0', 10) || 0;
+      const offset = pageOffset(args.cursor);
 
       const run = within(found, () =>
         runQuery(region, {
@@ -1061,8 +1213,19 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
               : `Rows ${offset + 1} to ${consumed} of ${run.matchedRows}. `;
         spoken = opening + page.text + (more ? suffix : '') + notes;
       } else {
-        const spec = { aggregate, order: args.order, ...(args.aggregate_column ? { aggregateColumn: args.aggregate_column } : {}) };
-        spoken = speakQuery(region, spec, target, run);
+        const spec = {
+          aggregate,
+          order: args.order,
+          from: offset,
+          ...(args.aggregate_column ? { aggregateColumn: args.aggregate_column } : {}),
+        };
+        spoken =
+          // A cursor past the last group: every group has been read. Spoken as a single
+          // figure it was "There is no total. No matching row held a number" — false of
+          // rows that held numbers and had all been said.
+          run.groupColumn && offset > 0 && !run.groups.length && run.groupCount > 0
+            ? `That was every ${columnName(run.groupColumn)}: ${run.groupCount} in all.`
+            : speakQuery(region, spec, target, run);
         // A breakdown says whole groups within the budget, and the cursor moves past
         // exactly those: trimmed afterwards, groups eleven to twenty were counted as read
         // and never heard, and "say more" was cut off with them.
@@ -1106,10 +1269,16 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         headerRows: region.headerRows.length,
         ingestedAt: table.ingestedAt,
       };
-      const answerId = await keepAnswer(store, { parts: [part], spec: args, structureRevision: found.revision });
+      const about = cleanText(
+        answerAbout({ aggregate }, target, run, conditionsTail(region, args.filters as FilterArg[])),
+        ABOUT_CHARS,
+      );
+      const answerId = await keepAnswer(store, { parts: [part], spec: args, structureRevision: found.revision, about });
 
       return ok(spoken, {
-        ...(answerId ? { answer_id: answerId } : { working_kept: false }),
+        // With the id, what the answer was in a few words: a client that explains it after
+        // other questions can name it in the words table_explain's `restate` uses.
+        ...(answerId ? { answer_id: answerId, answer_about: about } : { working_kept: false }),
         result: run.result,
         exact: run.result === null ? null : exactNumber(run.result),
         matched_rows: run.matchedRows,
@@ -1153,26 +1322,42 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         'and this reads back the source cells, with the full heading each one sits under, and names ' +
         'anything that was skipped. Use it whenever they ask how you know, are you sure, where that ' +
         'came from, or which rows those were — and offer it yourself after any total or average, ' +
-        'because someone who cannot see the sheet is entitled to check a number.',
+        'because someone who cannot see the sheet is entitled to check a number. If anything else ' +
+        'has been asked since that answer, set `restate`, so the reply first says which answer it is about.',
       inputSchema: {
         answer_id: text(80).describe('From a previous query result.'),
         limit: z.number().int().min(1).max(50).default(PAGE),
+        restate: z
+          .boolean()
+          .default(false)
+          .describe(
+            'True when other questions came between that answer and this one: the reply then starts ' +
+              'by naming the answer it explains ("For the earlier answer, 690 thousand, the total of Amount").',
+          ),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    safe('reading back that answer', async ({ answer_id, limit }) => {
-      const a = await store.getAnswer(answer_id);
+    safe('reading back that answer', async ({ answer_id, limit, restate }) => {
+      const a: Kept | null = await store.getAnswer(answer_id);
       if (!a) {
         return fail(
           'I no longer have the working for that answer.',
           'Ask the question again and I will keep it this time.',
         );
       }
+      // Which answer this is about. Straight after it, the listener knows; after a
+      // refused question or two, "That came from C3 and C6" was heard as evidence for
+      // whatever they had asked last. A caller that knows other questions came between
+      // asks for the answer to be named first.
+      // "For", not "About": an answer over many rows is itself "about 88 thousand", and
+      // "About the earlier answer, about 88 thousand" said the word twice in five.
+      const about = a.about ?? aboutParts(a.parts);
+      const lead = restate ? `For the earlier answer, ${about}: ` : '';
       // Each operand keeps its own sheet, cells and heading. A comparison that
       // pooled them would have to pick one heading for both, which is how this tool
       // came to tell people that the second column's cells held the first column's
       // measure.
-      let spoken = speakExplain(
+      const explained = speakExplain(
         a.parts.map((p) => ({
           label: p.label,
           sheet: p.sheet,
@@ -1186,7 +1371,10 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
           ...(p.winnerLabels ? { winnerLabels: p.winnerLabels } : {}),
           ...(p.winnerCount !== undefined ? { winnerCount: p.winnerCount } : {}),
         })),
+        SPOKEN_WORD_LIMIT - wordCount(lead),
       );
+      // "For the earlier answer, 690 thousand, the total of Amount: that came from …".
+      let spoken = lead ? lead + explained.replace(/^(That|Those) /, (w) => w.toLowerCase()) : explained;
 
       // Every operand is checked against the table as it stands now. Only the first
       // was, so correcting the right-hand table of a comparison left the comparison
@@ -1265,6 +1453,8 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
       return ok(
         spoken,
         {
+          // What the explained answer was, in words a caller can say before the cells.
+          answer_about: about,
           parts: perPart,
           // Flattened view of the first operand, for callers expecting one set.
           sheet: first?.sheet ?? null,
@@ -1383,7 +1573,13 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
           .optional()
           .describe('Only when the second measure lives in a different file.'),
         right_sheet: text().optional().describe('Sheet or table number of the second measure, when it differs.'),
-        aggregate: z.enum(['sum', 'avg', 'min', 'max']).default('sum'),
+        aggregate: z
+          .enum(['sum', 'avg', 'min', 'max'])
+          .optional()
+          .describe(
+            'What to compare. Omit to compare totals, or averages for a percentage, a rate or a ' +
+              'per-person figure, whose totals mean nothing.',
+          ),
         filters: FILTERS.describe(
           'Row conditions applied to both sides, combined with AND: "for the north" is Region equal to ' +
             'North. They are said at the head of the answer. Omit to compare every row.',
@@ -1405,11 +1601,16 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
       const lc = within(left, () => resolveColumn(left.region, args.left_column));
       const rc = within(right, () => resolveColumn(right.region, args.right_column));
       const filters = args.filters as FilterArg[];
+      // Left unsaid, a comparison of amounts compares totals and one of rates their
+      // averages. It always compared totals, so "how does this year's margin compare"
+      // added up every row's percentage on each side and set the two sums against each
+      // other. Asked for in so many words, a total of a rate is refused, as it is anywhere.
+      const aggregate = args.aggregate ?? (rateLike(lc, left.region) || rateLike(rc, right.region) ? 'avg' : 'sum');
       const a = within(left, () =>
-        runQuery(left.region, { filters, aggregate: args.aggregate, aggregateColumn: args.left_column }),
+        runQuery(left.region, { filters, aggregate, aggregateColumn: args.left_column }),
       );
       const b = within(right, () =>
-        runQuery(right.region, { filters, aggregate: args.aggregate, aggregateColumn: args.right_column }),
+        runQuery(right.region, { filters, aggregate, aggregateColumn: args.right_column }),
       );
       const conditions = conditionsSaid(left.region, filters);
 
@@ -1464,7 +1665,7 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         cellCount: q.provenance.cellCount,
         excluded: q.provenance.excluded,
         path: c.path,
-        aggregate: args.aggregate,
+        aggregate,
         ...(q.winners.length
           ? {
               winners: q.provenance.cells.slice(0, q.winners.length),
@@ -1479,10 +1680,18 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
         ingestedAt: l.table.ingestedAt,
       });
 
+      // Anything but a total is named on both sides: an average compared without the word
+      // sounds exactly like a total.
+      const measured = { sum: '', avg: 'average ', max: 'highest ', min: 'lowest ' }[aggregate];
+      const lw = measured + ln;
+      const rw = measured + rn;
+
+      const about = cleanText(`${lw} against ${rw}${conditionsTail(left.region, filters)}`, ABOUT_CHARS);
       const answerId = await keepAnswer(store, {
         parts: [side(left, lc, a, ln), side(right, rc, b, rn)],
-        spec: args,
+        spec: { ...args, aggregate },
         structureRevision: left.revision,
+        about,
       });
 
       // A total row left out of either side is said, as it is for any other answer:
@@ -1497,21 +1706,31 @@ export function registerTools(server: McpServer, index: LandmarkIndex, store: St
       const numberNotes = [...new Set([lc.numberNote, rc.numberNote].filter((n): n is string => Boolean(n)))]
         .map((n) => ` ${cleanText(n, 200)}`)
         .join('');
+      // The gap between two percentages is in points. "4% more than …, about 27%" set a
+      // difference of points beside a relative change, both said as percent, and now
+      // that a comparison of margins compares them by default, every one was said so.
+      const points = lc.kind === 'percent' && rc.kind === 'percent';
+      const gap = points
+        ? `${speakAmount(Math.abs(diff))} percentage ${tidy(Math.abs(diff)) === 1 ? 'point' : 'points'}`
+        : speakAmount(Math.abs(diff), lc.kind);
+      const sentence =
+        diff === 0
+          ? `${lw} and ${rw} are both ${speakAmount(av, lc.kind)}.`
+          : `${lw} is ${gap} ${dir} ${rw}${pctPhrase}: ` +
+            `${speakAmount(av, lc.kind)} against ${speakAmount(bv, rc.kind)}.`;
       const spoken =
         capWords(
-          conditions +
-            (diff === 0
-              ? `${ln} and ${rn} are both ${speakAmount(av, lc.kind)}.`
-              : `${ln} is ${speakAmount(Math.abs(diff), lc.kind)} ${dir} ${rn}${pctPhrase}: ` +
-                `${speakAmount(av, lc.kind)} against ${speakAmount(bv, rc.kind)}.`),
-          HEADLINE_WORD_LIMIT + 10 + wordCount(conditions),
+          conditions + (conditions || !measured ? sentence : sentence.charAt(0).toUpperCase() + sentence.slice(1)),
+          HEADLINE_WORD_LIMIT + 10 + wordCount(conditions) + wordCount(measured) * 2 + (points ? 2 : 0),
         ) +
         notes +
         numberNotes +
         (structureCaveat(left.region) || structureCaveat(right.region));
 
       return ok(spoken, {
-        ...(answerId ? { answer_id: answerId } : { working_kept: false }),
+        // With the id, what the answer was in a few words: a client that explains it after
+        // other questions can name it in the words table_explain's `restate` uses.
+        ...(answerId ? { answer_id: answerId, answer_about: about } : { working_kept: false }),
         ...(filters.length ? { filters_applied: filters } : {}),
         left: { name: lc.spoken, value: av, exact: exactNumber(av) },
         right: { name: rc.spoken, value: bv, exact: exactNumber(bv) },

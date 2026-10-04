@@ -46,15 +46,48 @@ const CATEGORY_MAX_DISTINCT = 25;
 // ---------------------------------------------------------------------------
 
 // The dong is written with its own sign (₫), with a plain "đ" in everyday Vietnamese
-// typing, or as VND/VNĐ. All four mark the same currency, and all four have to be
-// recognised or a Vietnamese price list reads as text.
-const CURRENCY_MARK = String.raw`(?:[$£€¥₫]|VNĐ|VND|USD|EUR|GBP|đ)`;
+// typing, as VND/VNĐ, or as the word itself — "1.250.000 đồng", "45.000 dong". All of
+// them mark the same currency, and all have to be recognised or a Vietnamese price
+// list reads as text that cannot be totalled.
+const CURRENCY_MARK = String.raw`(?:[$£€¥₫]|VNĐ|VND|USD|EUR|GBP|đồng|dong|đ)`;
 const CURRENCY = new RegExp(
   String.raw`^\s*${CURRENCY_MARK}\s?-?[\d,.\s]+$|^\s*-?[\d,.\s]+\s?${CURRENCY_MARK}\s*$`,
   'iu',
 );
 const PERCENT = /^\s*-?[\d,.]+\s*%\s*$/;
 const BOOLEANISH = /^(true|false|yes|no|y|n|có|không)$/i;
+
+/**
+ * A negative written the accountant's way, wrapped in parentheses: "(2,300)", "($219.99)",
+ * "$ (219.99)", "(1.3%)". Excel writes every #,##0_);(#,##0) cell into a CSV like this,
+ * and read as text it dropped the loss month from a P&L — the one row that mattered —
+ * while "no row has Profit less than 0" was said aloud. The groups are the mark outside
+ * on the left, the text inside, and the mark outside on the right.
+ */
+const ACCOUNTING_NEGATIVE = new RegExp(
+  String.raw`^((?:[$£€¥₫]|VNĐ|VND|USD|EUR|GBP)?\s*)\(([^()]*)\)(\s*(?:[$£€¥₫%]|VNĐ|VND|USD|EUR|GBP|đồng|dong|đ)?)$`,
+  'iu',
+);
+
+/**
+ * The text of an accounting negative without its parentheses ("($219.99)" → "$219.99"),
+ * or null when the text is not one.
+ *
+ * A small one is a negative too: a statement "in thousands" writes a loss of 45 as
+ * "(45)". Refusing "(1)" to "(99)" here, to keep a Vietnamese form's column-numbering
+ * row from reading as negatives, dropped exactly those losses — "lowest profit" named
+ * the smallest gain. That row is told apart as a row instead (`isColumnNumbering`),
+ * and taken as part of the headings. A bare year, "(2025)" under a heading, is still
+ * not a figure: a loss that size is written "(2,025)".
+ */
+export function accountingNegative(text: string): string | null {
+  const m = ACCOUNTING_NEGATIVE.exec(text);
+  if (!m) return null;
+  const inside = m[2]!.trim();
+  if (/^(?:19|20)\d{2}$/.test(inside) && !m[1]!.trim() && !m[3]!.trim()) return null;
+  return `${m[1]}${inside}${m[3]}`;
+}
+
 /**
  * A currency amount has two minor digits at most — the dong and the yen have none — so
  * one separator followed by exactly three digits can only group thousands: "€1.200",
@@ -97,10 +130,23 @@ export interface ReadNumber {
 export function readNumber(v: CellValue, convention: 'dot' | 'comma' = 'dot'): ReadNumber | null {
   if (typeof v === 'number') return Number.isFinite(v) ? { value: v, style: 'plain' } : null;
   if (typeof v === 'boolean' || v instanceof Date || v === null) return null;
-  const s = v.trim();
+  const trimmed = v.trim();
   // Most text is not a number at all; this runs on every cell of every query.
-  if (!s || !/\d/.test(s)) return null;
-  const body = s.replace(/VNĐ|VND|USD|EUR|GBP|[$£€¥₫%\s]/giu, '').replace(/^đ|đ$/iu, '');
+  if (!trimmed || !/\d/.test(trimmed)) return null;
+  // "đồng" typed with combining marks, as some keyboards and exports write it, is the
+  // same word; checked first, because normalising every cell would cost every query.
+  const s = /[\u0300-\u036f]/u.test(trimmed) ? trimmed.normalize('NFC') : trimmed;
+  if (s.includes(')')) {
+    const inside = accountingNegative(s);
+    if (inside !== null) {
+      // The inside must be a number of its own, without a sign: "(note 1)" stays text.
+      // Nor is it zero: Excel writes a zero as "-", and "(000)" or "(USD 000)" under a
+      // heading says the figures are in thousands.
+      const r = inside.includes('-') ? null : readNumber(inside, convention);
+      return r && r.value !== 0 ? { value: -r.value, style: r.style } : null;
+    }
+  }
+  const body = s.replace(/VNĐ|VND|USD|EUR|GBP|[$£€¥₫%\s]/giu, '').replace(/^đ|(?:đồng|dong|đ)$/iu, '');
   if (!/^-?[\d.,]*\d$/.test(body)) return null;
 
   const negative = body.startsWith('-');
@@ -854,6 +900,40 @@ export function looksLikeIdentifier(header: string, present: readonly CellValue[
   );
 }
 
+/**
+ * The headings of a column that numbers the rows: "STT" (số thứ tự) heads one on nearly
+ * every Vietnamese sheet; "No.", "#" and "S/N" do in English.
+ */
+const ROW_NUMBER_HEADER =
+  /^(?:stt|tt|số\s*tt|số\s+thứ\s+tự|thứ\s+tự|no\.?|nr\.?|#|s\/n|s\.\s?no\.?|sr\.?\s*no\.?|sl\.?\s*no\.?|serial\s+no\.?)$/iu;
+
+/**
+ * Is this column the rows' own numbering — "STT" over 1, 2, 3 — rather than a quantity?
+ *
+ * The heading alone is not enough ("No." can head a count), so the values must count
+ * the rows: 1 upwards in steps of one, starting again at 1 where a sheet numbers each
+ * section afresh, or down to 1.
+ */
+export function numbersRows(header: string, present: readonly CellValue[]): boolean {
+  if (!ROW_NUMBER_HEADER.test(header.normalize('NFC').trim())) return false;
+  if (present.length === 0 || !present.every(bareDigits)) return false;
+  const n = present.map((v) => Number(String(v).trim()));
+  if (!n.every(Number.isSafeInteger)) return false;
+  const up = n.every((x, k) => (k === 0 ? x === 1 : x === n[k - 1]! + 1 || (x === 1 && n[k - 1]! >= 2)));
+  const down = n[n.length - 1] === 1 && n.every((x, k) => k === 0 || x === n[k - 1]! - 1);
+  return up || down;
+}
+
+/**
+ * The heading of a column of note references: "Note", "Notes", "Ref", "Thuyết minh", and
+ * the notes column of an ordinary list — "Ghi chú", "Chú thích", "Remarks", "Comments",
+ * "Footnotes". "(1)", "(2)" under "Ghi chú" are footnote marks; read as accounting
+ * negatives they made a column of minus ones and twos, offered as a second figure to
+ * total, and "the ghi chú for tiền nhà" was "minus 1".
+ */
+const NOTE_REF_HEADER =
+  /^(?:notes?|note\s+ref\.?|ref\.?|thuyết\s+minh|ghi\s+chú|chú\s+thích|chú\s+giải|remarks?|comments?|footnotes?)$/iu;
+
 /** A spreadsheet error value as Excel displays it: #DIV/0!, #N/A, #REF! and the rest. */
 const SPREADSHEET_ERROR = /^#(?:DIV\/0!|N\/A|NAME\?|NULL!|NUM!|REF!|VALUE!|SPILL!|CALC!|FIELD!|BLOCKED!|CONNECT!|BUSY!|UNKNOWN!|GETTING_DATA)$/i;
 
@@ -959,6 +1039,24 @@ export function profileColumn(
   if (share(numericCount) > 0.3 && looksLikeIdentifier(header, present)) {
     return { ...base, kind: 'text', identifier: true, ...listable() };
   }
+  // A column that numbers the rows is not an amount either. With a total, "what is the
+  // total" on the most ordinary Vietnamese sheet asked "Which column? I have STT and Số
+  // tiền", offering a total of row numbers. So it has no total, range or average — a
+  // voice client offers only columns with a total — but it stays a number column:
+  // made text, "items 1 to 5" compared "10" with "5" as text, and 10 came first. Its
+  // values are not listed: "top 3" would otherwise name row 3.
+  if (numericCount === present.length && numbersRows(header, present)) {
+    return { ...base, kind: 'number', identifier: true, rowNumbers: true };
+  }
+  // A statement's note references, "Note" over "(3)" and "(4)", are labels in brackets,
+  // not losses: read as accounting negatives they made a column of minus threes.
+  if (
+    numericCount > 0 &&
+    NOTE_REF_HEADER.test(header.normalize('NFC').trim()) &&
+    present.every((v) => asNumber(v) === null || (typeof v === 'string' && /^\(\s*\d{1,3}\s*\)$/.test(v.trim())))
+  ) {
+    return { ...base, kind: 'text', ...listable() };
+  }
 
   if (numericShare > 0.8) {
     const vals = numbers.filter((n): n is number => n !== null);
@@ -979,7 +1077,9 @@ export function profileColumn(
       mean: sum / vals.length,
       nonNumeric: nonBlank.length - numericCount,
     };
-    const strings = present.filter((v) => typeof v === 'string') as string[];
+    // An accounting negative is judged by what is inside its parentheses: "($219.99)"
+    // is as much an amount of money as "$219.99".
+    const strings = (present.filter((v) => typeof v === 'string') as string[]).map((s) => accountingNegative(s.trim()) ?? s);
     const currencyish = strings.filter((s) => CURRENCY.test(s)).length;
     const percentish = strings.filter((s) => PERCENT.test(s)).length;
     const kind: ColumnKind =

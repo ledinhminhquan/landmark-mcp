@@ -1,15 +1,16 @@
 # Internal friction — our own defects, and what became of them
 
-Updated September 27, 2026. Everything here is Landmark's own doing. None of it is a complaint
+Updated October 4, 2026. Everything here is Landmark's own doing. None of it is a complaint
 about Amazon, Cloudflare, Node or MCP, and none of it belongs in the vendor
 [friction log](FRICTION-LOG.md).
 
-Two reviews found these. The first, on September 12, reproduced seventeen defects against the
+Reviews found these. The first, on September 12, reproduced seventeen defects against the
 commit then published (`60dc188`), plus one conditional number-format probe; those eighteen are
 listed below with what happened to each. The second, on September 27, was much wider; a
-selection of what it found and what was fixed follows them. Every "fixed" below names the test
-that now fails if the defect comes back. In this build 439 tests pass and `npm run typecheck` is
-clean.
+selection of what it found and what was fixed follows them, then a last check on September 28
+and a fresh review of the published repository on October 4. Every "fixed" below names the
+test that now fails if the defect comes back, or says there is none. In this build 615 tests
+pass and `npm run typecheck` is clean.
 
 Evidence for the first review: [module results](feedback-evidence/a5-reproduction-results.json),
 [runtime results](feedback-evidence/a5-runtime-results.json) and the
@@ -18,7 +19,7 @@ microphone, deployed Worker, Alexa device or simulator was involved in either re
 
 ## At a glance
 
-| # | Defect found on September 12 | Status on September 27 |
+| # | Defect found on September 12 | Status on October 4 |
 |---:|---|---|
 | 1 | An all-text table lost two of its three records | Fixed |
 | 2 | "2025 Q2 revenue" summed the wrong year's column | Fixed |
@@ -36,7 +37,7 @@ microphone, deployed Worker, Alexa device or simulator was involved in either re
 | 14 | The MCP Apps widget never completed its handshake | Fixed in a simulated host; not tried in a real one |
 | 15 | The page's client could not read a valid event stream | Fixed |
 | 16 | `npm start` failed on a clean checkout | Fixed |
-| 17 | The security notes missed three high advisories | Fixed |
+| 17 | The security notes missed three high advisories | Fixed; out of date again a week later, and fixed again |
 | 18 | "1.234,56" was read as 1.23456 | Fixed |
 
 ## The eighteen cases from September 12
@@ -279,8 +280,12 @@ ones, all one development-only chain.
 **Severity rating.** Medium.
 **Workaround used.** None then.
 **Actionable suggestion.** Fix what can be fixed, and regenerate the notes from the audit.
-**Status: fixed.** The high chain was removed by upgrading `wrangler`, and on September 27
-`npm audit` reports 2 moderate, 0 high, as the notes now say.
+**Status: fixed, and it happened again.** The high chain was removed by upgrading `wrangler`,
+and on September 27 `npm audit` reported 2 moderate, 0 high, as the notes then said. A week
+later the note was out of date: advisories published on September 28 and 29 made the same
+lockfile report 8 vulnerabilities, 2 of them high. On October 4 a lockfile-only
+`npm audit fix` and Wrangler 4.147.0 brought it back to 2 moderate, 0 high, and the notes give
+both audits. There is no automated test; the notes tell the reader to re-run `npm audit`.
 
 ### 18. Read a comma-decimal number without changing its value
 
@@ -321,10 +326,12 @@ server and the page. A selection, most serious first:
 | "Break it down" after "total population" asked "Which column?" | It breaks down the figure just given | `test/conversation.test.ts`: "\"break it down\" breaks down the figure just given, in a table with two number columns" |
 | "Carry on" with nothing saved said "Nothing is saved" twice | Said once, with how to save | `test/conversation.test.ts`: "resuming with nothing saved says so" |
 
-Two page fixes have no automated test, because the page's own script is inline in
-`web/index.html`: the status ring now returns to "Ready" after each answer instead of staying on
-"Speaking", and the conversation scrolls inside its panel instead of pushing the newest answer
-below the fold. The second was checked in the page at 1280×720 on September 27.
+Two page fixes have no automated test: the status ring now returns to "Ready" after each answer
+instead of staying on "Speaking", and the conversation scrolls inside its panel instead of
+pushing the newest answer below the fold. The page's own script is inline in `web/index.html`,
+and on September 27 nothing tested it. Since October 4, `test/a11y-page.test.ts` runs some of
+its functions, but not these two. The second was checked in the page at 1280×720 on
+September 27.
 
 ## Found on September 28 and fixed in this build
 
@@ -343,6 +350,40 @@ gave a wrong figure with nothing in the sentence to show it:
 | The shorter of two side-by-side tables took the longer one's rows | Each keeps its own | `test/ingest-layout.test.ts`: "side-by-side tables of different lengths each keep only their own rows" |
 | A PivotTable's year row was read as a record | Both heading rows are read | `test/ingest-layout.test.ts`: "an Excel PivotTable is read with both of its heading rows" |
 | "Source: \| text" under a table was a record, and made its number column untotalable | Kept as a note | `test/ingest-layout.test.ts`: "a \"Source:\" line with its text beside it, or a sentence under a number column, is a note" |
+
+## Found on October 4 and fixed in this build
+
+A fresh review of the published repository asked new questions of the voice page, fed it new
+workbook shapes, and re-ran the dependency audit (see [SECURITY-NOTES.md](SECURITY-NOTES.md)).
+A selection of what it found follows. The spoken questions in the table were asked again of
+the previous commit and of this build on October 4, and the answers quoted are this build's.
+
+| Defect | Now | Test |
+|---|---|---|
+| "How many reps earned less than Chi" answered "1 row matches", counting Chi; the right answer is 4 | Chi's figure is looked up and said first: "Chi: Revenue 21,000. 4 rows match." | `test/router2-judge.test.ts`: "\"less than Chi\" compares with Chi's figure, and says it, rather than counting Chi" |
+| "How much was the biggest deal" and "how much did An earn" both gave the grand total, about 61.1 thousand | The biggest deal, "21 thousand, for Chi", and An's own 15,600 | `test/router2-judge.test.ts`: "the most specific word chooses the figure: \"how much was the biggest deal\" is the biggest"; "the rep called An is a name before \"earn\", \"and\" and \"or\", not an article" |
+| "What is the total GDP of Asia" added up a per-capita column, about 16.4 thousand | A total over two or more rows of a figure per capita or per head, a rate or ratio, a speed, a median, or a percentage that is not a share of the whole is refused; the average is given and called one. A one-row total, or one row per group, is that row's own figure. A column that is already an average, or per person, unit or serving, can add up to something real ("Cost per person" over the parts of a trip), so a total asked for in so many words is given and said to be one: "340. That adds up Cost per person (usd) across 6 rows, each of them a per-person figure." Shares ("Ownership %", "Tỷ trọng (%)") add up to 100% | `test/engine2-review.test.ts`: "\"the total GDP of Asia\" is not a sum of GDP per capita"; `test/integrate2-review.test.ts`: "a total of a rate over one row is that row's figure, and over several is still refused"; `test/repair2-ingest.test.ts`: "a total of figures per person, or of averages, is given when asked for, and said to add them up"; "a share of the whole adds up in Vietnamese and as ownership; a per-capita figure is still refused" |
+| A question the page could not parse, such as "revenue in the west", was answered by describing the table again | It says what it did not understand: "I could not find \"west\" in this table." | `test/router2-judge.test.ts`: "a question that cannot be answered says what was not understood, instead of describing the table" |
+| Average and Count rows under a table, and Vietnamese "Trung bình" rows, were counted as records | Left out of answers like Total rows, as Max and Min rows are, and named: "I left out the Total and Average rows." | `test/ingest2-summary.test.ts`: "Total, Average, Max and Min under the same rows are all summaries"; `test/integrate2-review.test.ts`: "Average rows left out of answers are named as what they are, not called totals" |
+| Accounting negatives such as "(2,300)", which Excel writes into CSV, were not read as numbers | Read as negative numbers | `test/ingest2-values.test.ts`: "a negative in parentheses is a negative number, with its currency or percent inside or out" |
+| "The highest amount per department" gave each department's total, and "from lowest to highest" was read highest first | "Highest Amount: Engineering, 480 thousand and Design, 210 thousand."; "Lowest first: Design, 234 thousand and Engineering, 560 thousand." | `test/integrate2-review.test.ts`: "\"the highest amount per department\" is each department's highest, said as one"; "\"from lowest to highest\" is the order of the list, not a request for the highest" |
+| In a wide table, column names after the eighth could not be reached, and "more" said there was nothing more | "More" reads on through every column | `test/engine2-review.test.ts`: "every column of a forty-column table can be reached by asking for more"; `test/integrate2-review.test.ts`: "\"more\" after describe reads every column of a forty-column table, to the last" |
+| "How do you know" after a refused question explained an older answer without saying which | It names that answer first: "About the earlier answer, 690 thousand, the total of Amount for Salaries: …" | `test/router2-judge.test.ts`: "explaining an answer from before a refusal names that answer first" |
+| "Which regions made more than 20000" tested each deal, not each region's total, and answered "South, 21 thousand." | The condition is tested on each region's total: "These are the regions whose total Revenue is over 20000. South, 24.9 thousand and North, about 20.6 thousand." | `test/repair2-router.test.ts`: "a condition on a group's figure is tested on that figure, not row by row" |
+| "How many reps sold more than Anh and Bảo combined" made both names filters: "Anh, 1 row and Bảo, 1 row." | The two are added, and the sum said first: "Anh and Bảo together: Revenue 20,550. 1 row matches." | `test/repair2-router.test.ts`: "two rows compared with are added together when said together, and one at a time otherwise" |
+| "What about Bảo" after "how many reps sold more than Anh" counted Bảo's own row: "1 row matches" | The same comparison, with Bảo: "Bảo: Revenue 8,150. 3 rows match." | `test/repair2-router.test.ts`: "\"what about Bảo\" after \"more than Anh\" asks the same comparison of Bảo" |
+| "What is their total" after the North's reps were listed gave the whole table, about 61.1 thousand | The rows just listed: "About 20.6 thousand. That is the total of Revenue across 2 rows." | `test/repair2-router.test.ts`: "\"their total\" after a listing is the total of the rows just listed" |
+| "How many countries have more than that" after Thailand's population said "8 rows match" | The figure just heard: "Compared with 71,801,279. 3 rows match." With no figure to compare, it asks "More than what?" | `test/repair2-router.test.ts`: "\"more than that\" compares with the figure just heard, and asks when there is none" |
+| "How many countries aren't in Asia" answered for Asia, 3 | 5 | `test/repair2-router.test.ts`: "\"aren't in Asia\" is not \"in Asia\"" |
+| "Break it down" after "total amount for salaries" broke down every line item: "Engineering, 560 thousand and Design, 234 thousand." | It keeps the question's conditions and says them first: "For Salaries: Engineering, 480 thousand and Design, 210 thousand." A single value of the column it breaks down by is dropped, so the filmed demo's "break it down" after "total amount for design" is unchanged | `test/repair2-router.test.ts`: "\"break it down\" keeps the condition it was asked after, and says it" |
+| An Average row that the workbook rounds, as `ROUND(AVERAGE(…), 0)` does, was counted as a record | Left out of answers like other summary rows, and so are the Highest, Lowest and Count rows under it | `test/repair2-ingest.test.ts`: "a budget Average row from ROUND(AVERAGE(), 0) is a summary, and so are the Highest, Lowest and Count rows under it" |
+| A cash-flow statement's "Net cash from operating activities" and other "Net cash …" subtotals, and its "Net change in cash", were counted as lines: 13 where there are 9 | Left out of the lines | `test/repair2-ingest.test.ts`: "a cash-flow statement's \"Net cash …\" subtotals and its net change are left out of the lines" |
+| "Prepared by: \| Jordan Lee" and "Approved by: \| Sam Park" under a table were counted as records | Kept as a note: "There is also a note: \"Prepared by: Jordan Lee. Approved by: Sam Park\"." | `test/repair2-ingest.test.ts`: "\"Prepared by: \| Jordan Lee \| Approved by: \| Sam Park\" is a sign-off, attached or after a blank row" |
+| A heading laid out in two columns above a table ("Employee: Jordan Lee" beside "Department: Field Sales") made a second table | One table under its title, with both lines kept as notes | `test/repair2-ingest.test.ts`: "a heading laid out in two columns above the table is one heading, not a table of its own" |
+| The page's first sentence listed test-fixture file names ("01 flat, 02 stacked header …") | Titles a person would give, from a titles file kept with the fixtures; the old names still open the files | `test/integrate2-review.test.ts`: "the opening listing names no test fixture, and the old names still open the files" |
+| A `tools/call` that left out the optional `arguments` was refused, so "what tables do I have" failed on any host that sends the name alone ([friction log](FRICTION-LOG.md) 11) | Answered, after the upgrade to SDK 1.32.0 | `test/transport.test.ts`: "a tool call that leaves out `arguments` is answered, as the specification allows" |
+| On the local server, a request sent on the same keep-alive connection after a 413 waited until it timed out | The 413 closes the connection | None; checked by request on October 4 |
+| The conversation log had no visible focus ring on a narrow layout, and the page scrolled sideways at 320 pixels | Both fixed in the page's styles | `test/a11y-page.test.ts`: "the conversation log draws its focus ring inside its own edge"; "no grid track refuses to shrink, so 320px does not scroll sideways" |
 
 ## Toolchain: TypeScript checking and Node's type stripping disagree
 
@@ -365,12 +406,15 @@ the first release with type stripping, cannot parse a typed private field; check
 
 A related testing note, checked September 27: in Git Bash on Windows, `TZ=America/Los_Angeles`
 set on the command line did not reach Node, which kept the machine's own zone. In PowerShell,
-`$env:TZ = 'Pacific/Kiritimati'; npm test` did reach it, and all 426 tests passed. The
-cross-time-zone runs for this build were made with a small preload that sets `process.env.TZ`.
+`$env:TZ = 'Pacific/Kiritimati'; npm test` did reach it. On October 4 all 615 tests of this
+build passed that way, once under America/Los_Angeles and once under Pacific/Kiritimati.
 
 ## Still open
 
-- **No authentication and no rate limiting.** See [SECURITY-NOTES.md](SECURITY-NOTES.md).
+- **No authentication and no rate limiting.** On a free-plan Worker, one anonymous caller could
+  use up the day's Durable Object request quota, after which the voice page answers
+  "Something went wrong" to every question but the list of tables until 00:00 UTC. See
+  [SECURITY-NOTES.md](SECURITY-NOTES.md).
 - **The local server forgets everything on restart.** Only the Worker keeps state durably.
 - **For MCP hosts, bookmarks and heading corrections last one connection.** Only the voice page
   carries them from one visit to the next. Answers can be explained from a later connection by
@@ -382,9 +426,9 @@ cross-time-zone runs for this build were made with a small preload that sets `pr
   has not been tried in a real host; and no blind or low-vision person has used Landmark.
 - **The page understands a fixed range of phrasings.** It routes by rules, not a model. Medians
   and percentiles, differences between groups ("which region grew the most") and synonyms such
-  as "richest" are not supported; they get a plain refusal or a question back, never a guessed
-  number. For example, "what is the median
-  population" answers "I cannot work out a median. I can give a total, an average, the highest,
-  the lowest, or a count."
+  as "richest", or "people" for population, are not supported; they get a plain refusal or a
+  question back, never a guessed number. For example, "what is the median population" answers
+  "I cannot work out a median. I can give a total, an average, the highest, the lowest, or a
+  count."
 - **Nobody can bring their own file at runtime.** A new spreadsheet goes through the offline
   ingest command, then a server restart or a redeploy.

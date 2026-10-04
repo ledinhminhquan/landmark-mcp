@@ -9,7 +9,7 @@
  * and cmd.exe pass "*.xlsx" through untouched.
  */
 
-import { writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, extname } from 'node:path';
 import { readSpreadsheet } from './read.ts';
 import { buildIndex, buildTable } from './build.ts';
@@ -32,9 +32,16 @@ function outFromNpm(): string | null {
   return v && v !== 'true' && v !== 'false' ? v : null;
 }
 
-function parseArgs(argv: readonly string[]): { files: string[]; out: string; fromNpm: boolean } {
+/** The titles file npm kept for itself, as it keeps --out (see outFromNpm). */
+function titlesFromNpm(): string | null {
+  const v = process.env['npm_config_titles'];
+  return v && v !== 'true' && v !== 'false' ? v : null;
+}
+
+function parseArgs(argv: readonly string[]): { files: string[]; out: string; fromNpm: boolean; titles: string | null } {
   const files: string[] = [];
   let out: string | null = null;
+  let titles: string | null = null;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === '--out' || a === '-o') {
@@ -43,11 +50,52 @@ function parseArgs(argv: readonly string[]): { files: string[]; out: string; fro
       out = next;
     } else if (a.startsWith('--out=')) {
       out = a.slice('--out='.length);
+    } else if (a === '--titles') {
+      const next = argv[++i];
+      if (!next) throw new Error('--titles needs a path.');
+      titles = next;
+    } else if (a.startsWith('--titles=')) {
+      titles = a.slice('--titles='.length);
     } else files.push(a);
   }
-  if (out !== null) return { files, out, fromNpm: false };
+  titles ??= titlesFromNpm();
+  if (out !== null) return { files, out, fromNpm: false, titles };
   const npmOut = outFromNpm();
-  return npmOut ? { files, out: npmOut, fromNpm: true } : { files, out: 'data/index.json', fromNpm: false };
+  return npmOut ? { files, out: npmOut, fromNpm: true, titles } : { files, out: 'data/index.json', fromNpm: false, titles };
+}
+
+/** The longest title a file may be given: it is spoken in every listing of the files. */
+const TITLE_CHARS = 60;
+
+/**
+ * Titles to speak for files, by file name: `{ "01-flat.xlsx": "Sales data" }`.
+ *
+ * A file is otherwise called by its file name, and a test fixture's file name is a
+ * test fixture's: the page's opening listing read "You have 01 flat, 02 stacked header,
+ * 03 merged header…" to everyone who opened it. A title changes what is said, never the
+ * table's id, so a bookmark or a call by id still reaches the same table. Every name in
+ * the file must be one of the inputs: a misspelt one would quietly leave the file name
+ * in place, which is the thing the file is there to stop.
+ */
+async function readTitles(path: string): Promise<Map<string, string>> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(path, 'utf8'));
+  } catch (err) {
+    throw new Error(`--titles ${path} could not be read as JSON: ${(err as Error).message}`);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`--titles ${path} must hold one object, from file name to title.`);
+  }
+  const titles = new Map<string, string>();
+  for (const [file, title] of Object.entries(parsed)) {
+    const said = typeof title === 'string' ? title.replace(/\s+/g, ' ').trim() : '';
+    if (!said || said.length > TITLE_CHARS) {
+      throw new Error(`--titles ${path}: the title for ${file} must be text of 1 to ${TITLE_CHARS} characters.`);
+    }
+    titles.set(file, said);
+  }
+  return titles;
 }
 
 function report(t: IndexTable): void {
@@ -68,17 +116,25 @@ function report(t: IndexTable): void {
       console.log(`    AMBIGUOUS — could instead ${alts || '(no alternative offered)'}`);
     }
     for (const c of r.columns) {
+      // Values that are not numbers in a number column are left out of every figure from
+      // it; shown here, so a dropped "(2,300)" is seen on the screen, not heard later as
+      // a total that is off by exactly that row.
+      const skipped = c.nonNumeric ? `  non-numeric=${c.nonNumeric}` : '';
+      // A number column with no total is the rows' own numbering ("STT"); said so, rather
+      // than left looking like a column whose figures went missing.
       const extra =
         c.sum !== undefined
-          ? `  sum=${c.sum}  range=${c.min}..${c.max}`
-          : c.categories
-            ? `  categories=${c.categories.slice(0, 6).join('|')}${c.categories.length > 6 ? '…' : ''}`
-            : '';
+          ? `  sum=${c.sum}  range=${c.min}..${c.max}${skipped}`
+          : c.identifier === 'row'
+            ? '  numbers the rows, never totalled'
+            : c.categories
+              ? `  categories=${c.categories.slice(0, 6).join('|')}${c.categories.length > 6 ? '…' : ''}`
+              : '';
       console.log(`      ${c.col}  ${c.spoken.padEnd(28)} ${c.kind.padEnd(9)} ${c.nonEmpty}/${c.nonEmpty + c.empty}${extra}`);
     }
     if (r.summaryRows?.length) {
       console.log(
-        `    total rows, left out of answers: ${r.summaryRows.map((i) => r.firstDataRow + i + 1).join(', ')}`,
+        `    total and summary rows, left out of answers: ${r.summaryRows.map((i) => r.firstDataRow + i + 1).join(', ')}`,
       );
     }
     if (r.inherited.length) {
@@ -91,12 +147,22 @@ function report(t: IndexTable): void {
   for (const w of t.warnings) console.log(`  ! ${w}`);
 }
 
-const { files: patterns, out, fromNpm } = parseArgs(process.argv.slice(2));
+const { files: patterns, out, fromNpm, titles: titlesPath } = parseArgs(process.argv.slice(2));
 if (patterns.length === 0) {
-  console.error('usage: npm run ingest -- <file.xlsx|file.csv|pattern> [more…] [--out data/index.json]');
+  console.error('usage: npm run ingest -- <file.xlsx|file.csv|pattern> [more…] [--out data/index.json] [--titles titles.json]');
   process.exit(2);
 }
 if (fromNpm) console.log(`output: ${out} (npm kept --out for itself and passed it on)`);
+
+let titles = new Map<string, string>();
+if (titlesPath !== null) {
+  try {
+    titles = await readTitles(titlesPath);
+  } catch (err) {
+    console.error(`\n${(err as Error).message}\nNothing written.`);
+    process.exit(1);
+  }
+}
 
 const files: string[] = [];
 let failed = 0;
@@ -110,9 +176,13 @@ for (const p of patterns) {
 }
 
 const tables: IndexTable[] = [];
+const titled = new Set<string>();
 for (const f of files) {
   try {
-    const table = buildTable(await readSpreadsheet(f));
+    const built = buildTable(await readSpreadsheet(f));
+    const title = titles.get(built.sourceName);
+    if (title !== undefined) titled.add(built.sourceName);
+    const table = title !== undefined ? { ...built, title } : built;
     tables.push(table);
     report(table);
   } catch (err) {
@@ -124,6 +194,15 @@ for (const f of files) {
         `  If ${f} was meant as the output, npm took --out for itself. In PowerShell, quote the double dash: npm run ingest '--' <files> --out ${f}`,
       );
     }
+    failed++;
+  }
+}
+
+// A title for a file that was not read: misspelt, or for a file left out. Either way
+// some file is about to be called by its file name after all.
+for (const file of titles.keys()) {
+  if (!titled.has(file)) {
+    console.error(`\n--titles names ${file}, which is not one of the files read.`);
     failed++;
   }
 }

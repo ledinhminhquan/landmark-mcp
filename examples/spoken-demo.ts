@@ -122,7 +122,9 @@ await section('A budget with merged cells', [
 await section('Highest, and which row it was', ['open the sales table', 'who is the top rep', 'how do you know']);
 
 await section('A sheet holding three tables', [
-  'open the three regions file',
+  // Called by the title the list of files says aloud. The fixture's file name ("the
+  // three regions file") still opens it too.
+  'open the mixed sheet',
   'how many tables are in this file',
   'table 2',
   'total actual',
@@ -139,6 +141,9 @@ await section('Countries, and what it will not guess', [
   'break it down',
   'what is the median population',
   'which country is the richest',
+  // A figure per capita has no total. The server marks the column so (and would refuse
+  // the sum), and the page asks for the average instead and says that it did.
+  'total GDP per capita',
 ]);
 
 await section('A place to come back to', [

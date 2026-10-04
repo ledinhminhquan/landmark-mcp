@@ -1,6 +1,6 @@
 # Friction log
 
-Updated September 27, 2026.
+Updated October 4, 2026.
 
 This log is about other people's tools and documentation: where Amazon's Alexa+ documentation,
 the MCP TypeScript SDK, ExcelJS and npm made the work harder than it needed to be. Problems in
@@ -9,12 +9,13 @@ was fixed and the test that proves it.
 
 How it was written: reconstructed from the repository's history, saved probe results and pages
 read on the dates given, not kept as a diary while building. Every Amazon entry was re-checked
-against the live page on September 27, 2026. Every tool entry has a local reproduction, dated.
+against the live page on September 27, 2026, and entry 2 again on October 4. Every tool entry
+has a local reproduction, dated; the SDK entries were re-run on October 4 against SDK 1.32.0.
 No time-to-hello-world was measured, so none is claimed. Severity is our own assessment of the
 effect on this project. We never ran the Alexa+ private toolkit, an Alexa simulator or device,
 or any AWS service; Amazon entries are documentation observations, not runtime failures.
 
-Entries 1–5 concern Amazon documentation. Entries 6–10 concern the MCP TypeScript SDK,
+Entries 1–5 concern Amazon documentation. Entries 6–11 concern the MCP TypeScript SDK,
 ExcelJS and npm. The friction-log bonus is optional and assessed by Amazon's review team
 ([official rules](https://amazonappdev2026.devpost.com/rules)); if space is short, entries 1, 2,
 4 and 5 matter most. Related: [product feedback](PRODUCT-FEEDBACK.md),
@@ -39,9 +40,10 @@ carry `"protocolVersion": "2025-03-26"`, with no note saying why.
 **Severity rating.** Medium. It cost extra cross-checking of the one version the hackathon makes
 mandatory. No rejection or measured delay is claimed.
 
-**Workaround used.** Pinned `@modelcontextprotocol/sdk` 1.30.0, whose latest revision is
-2025-11-25, and asserted a real 2025-11-25 initialize exchange in `test/wire.test.ts` ("negotiates
-exactly the revision the hackathon requires"). How Alexa+ itself negotiates is untested.
+**Workaround used.** Pinned `@modelcontextprotocol/sdk` 1.30.0, and since October 4 1.32.0;
+the latest revision of both is 2025-11-25. Asserted a real 2025-11-25 initialize exchange in
+`test/wire.test.ts` ("negotiates exactly the revision the hackathon requires"). How Alexa+
+itself negotiates is untested.
 
 **Actionable suggestion.** Label each example payload with its revision, add a 2025-11-25
 request and response pair, and keep older examples only with a note saying what they are for.
@@ -50,20 +52,23 @@ request and response pair, and keep older examples only with a note saying what 
 
 **Task attempted.** Find the route from the public documentation to an authorised local setup
 for the Alexa+ toolkit. Owner: Amazon Alexa+ onboarding documentation. A documentation
-walkthrough, re-checked September 27; no private package was installed.
+walkthrough, re-checked September 27 and October 4; no private package was installed.
 
 **Steps taken.** Read the MCP Toolkit Overview, then Set Up Your Development Environment
 through the AWS-account and private-registry steps, from Windows with Node 23 in Vietnam. Then
-read the hackathon FAQ.
+read the hackathon FAQ, and the Alexa+ Developer Docs Home.
 
 **Expected vs actual.** Expected the first page to say whether an ordinary developer can get
 access at all. The overview says "The MCP Toolkit is available in the United States" and says
 nothing about partners. The setup page lists macOS and Ubuntu with Node 24 or later, and assumes
 "the AWS account that you provided to the Alexa Solutions Architect" before private CodeArtifact
-setup. The answer came from the hackathon FAQ instead: the tools "are in preview and available
-to select partners only - there is currently no way for hackathon participants to apply for or
-gain access", noting this is "sometimes missing from individual setup-guide pages, which has
-caused some confusion".
+setup. The add-on docs home does carry the notice ("At this time, Category SDK and MCP Toolkit
+are available to select partners only"), but the overview and setup pages, where a developer
+following the guide lands, do not. The plain answer for entrants came from the hackathon FAQ:
+the tools "are in preview and available to select partners only - there is currently no way for
+hackathon participants to apply for or gain access", noting this is "sometimes missing from
+individual setup-guide pages, which has caused some confusion".
+[Docs home](https://developer.amazon.com/docs/alexaplus/add-ons/home);
 [Setup](https://www.developer.amazon.com/docs/alexaplus/add-ons/set-up-your-development-environment.html);
 [FAQ](https://amazonappdev2026.devpost.com/details/faqs).
 
@@ -173,8 +178,8 @@ should show accessibility instead.
 
 **Task attempted.** Return a tool result from a per-request, Web-standard handler. Owner: our
 integration, with a documentation suggestion for the MCP TypeScript SDK. Reproduced September
-13, 2026 with a local probe; the probe was re-run in a clean clone on September 27 with the
-same result.
+13, 2026 with a local probe; the probe was re-run in a clean clone on September 27, and on
+October 4 against SDK 1.32.0, with the same result.
 
 **Steps taken.** With SDK 1.30.0, registered a tool with a 30 ms synthetic delay, connected a
 fresh transport, awaited `handleRequest`, then closed the transport straight away. Repeated
@@ -201,7 +206,9 @@ as mandatory for stateless servers.
 
 **Task attempted.** Make every failure speakable: a voice host reads a `spoken` field, and a
 refusal with nothing to say leaves the listener in silence. Owner: MCP TypeScript SDK.
-Reproduced September 27, 2026 with SDK 1.30.0 and Zod 3.25.76 on Node 23.11.
+Reproduced September 27, 2026 with SDK 1.30.0 and Zod 3.25.76 on Node 23.11, and again on
+October 4 with SDK 1.32.0: the reply is word for word the same, and `createToolError` is still
+`private`.
 
 **Steps taken.** Registered a tool whose only argument is `z.string().max(5)`, called it with a
 longer string over Streamable HTTP, and read the result. Then looked for a way to shape that
@@ -230,7 +237,8 @@ errors, or pass them to a handler the server registers, so the result can carry
 
 **Task attempted.** Register a tool whose input was first written as JSON Schema. Owner: our
 SDK integration; low-priority onboarding feedback for the SDK. Reproduced September 13 with
-SDK 1.30.0 and Zod 3.25.76; the earlier compiler output that prompted it was not kept.
+SDK 1.30.0 and Zod 3.25.76, and on October 4 with SDK 1.32.0; the earlier compiler output that
+prompted it was not kept.
 
 **Steps taken.** Called `registerTool` with a Zod raw shape, with `z.object()`, and with a plain
 JSON Schema object, then called the two valid tools over Streamable HTTP.
@@ -297,8 +305,61 @@ index, and exited 0.
 **Workaround used.** The ingest CLI now reads `npm_config_out` when npm kept the flag, and
 refuses, writing nothing, when a bare path shows npm took `--out` (`test/ingest-cli.test.ts`:
 "an --out that npm kept for itself still decides where the index goes"). Its message tells
-PowerShell users to quote the dash: `npm run ingest '--' <files> --out <path>`.
+PowerShell users to quote the dash: `npm run ingest '--' <files> --out <path>`. The `--titles`
+option added on October 4 is read the same way, from `npm_config_titles`: in PowerShell,
+`npm run ingest -- <files> --titles=<file> --out=<path>` with the dash unquoted wrote the
+titled index to the path given (checked October 4; no automated test).
 
 **Actionable suggestion.** Have `npm.ps1` pass a bare `--` through to npm, or have npm's
 `run-script` documentation say that PowerShell users must quote it, and say in the warning that
 the flag was not passed to the script.
+
+## 11. SDK 1.30.0 refused a tool call that left out the optional `arguments`, even from its own client
+
+**Task attempted.** Answer "what tables do I have" and "pick up where I left off" from any MCP
+host. Both are tools that need no input, and the 2025-11-25 schema makes `arguments` optional
+on `tools/call`. Owner: MCP TypeScript SDK; fixed upstream in 1.32.0. Found on October 4, 2026
+by a review of this project, and reproduced that day with SDK 1.30.0 and 1.32.0, Zod 3.25.76
+and Node 23.11.
+
+**Steps taken.** Registered two tools on `McpServer`, one with an empty input shape and one
+whose only argument is optional, served through `WebStandardStreamableHTTPServerTransport`
+with JSON responses. Sent `{"method":"tools/call","params":{"name":"list_things"}}` with no
+`arguments`, then the same with `"arguments":{}`. Connected the SDK's own `Client` to the same
+server in process and called `client.callTool({ name: 'list_things' })`. Repeated all of it
+with SDK 1.32.0. Then sent the bare call to Landmark's own handler as it was before the
+upgrade.
+
+**Expected vs actual.** Expected the call to run: the SDK's own request schema declares
+`arguments` as `.optional()` (`CallToolRequestParamsSchema` in `dist/esm/types.js`). With SDK
+1.30.0 every call without `arguments` came back with `isError: true`: "MCP error -32602: Input
+validation error: Invalid arguments for tool list_things: Invalid input: expected object,
+received undefined" for the empty shape, and "…: Required" for the optional one. With
+`"arguments":{}` both ran. `callTool({ name })` puts no `arguments` on the wire, so the SDK's
+own client and server did not work together for a tool without input. In Landmark,
+`table_list` and `table_resume` were both refused, and our own spoken refusal made it worse:
+"Part of that request was not something I can use. Ask it again in other words, naming a
+column from the description." With SDK 1.32.0, which validates `args ?? {}`, every one of
+these calls ran. The SDK's GitHub shows the history: a fix for tools whose parameters are all
+optional was merged on the main line on January 23, 2026
+([#1404](https://github.com/modelcontextprotocol/typescript-sdk/pull/1404)); an issue opened on
+April 9 reported it missing from 1.x
+([#1869](https://github.com/modelcontextprotocol/typescript-sdk/issues/1869)); the 1.x fix
+([#2045](https://github.com/modelcontextprotocol/typescript-sdk/pull/2045)) was merged on
+October 2 and released that day in 1.32.0, with end-to-end tests
+([#2931](https://github.com/modelcontextprotocol/typescript-sdk/pull/2931)).
+
+**Severity rating.** Medium. It fails the first question a listener is likely to ask, on any
+host that sends the name alone, which the specification allows and the SDK's own client does.
+Which hosts do so in practice is untested. Our voice page always sends `arguments: {}`, so it
+was not affected, which is why we did not notice.
+
+**Workaround used.** Upgraded to SDK 1.32.0, pinned exactly, rather than patching the request
+in our handler. `test/transport.test.ts`: "a tool call that leaves out `arguments` is
+answered, as the specification allows"; "the SDK client can call a tool with no arguments at
+all".
+
+**Actionable suggestion.** The fix has shipped, so this is about the next one. When a server
+fix lands on the main line, backport it to 1.x or list it as a known 1.x issue: servers pinned
+to 1.x waited about eight months for this one. Keep a test in which the SDK's own client calls
+the SDK's own server with `callTool({ name })`, as 1.32.0's end-to-end tests now do.

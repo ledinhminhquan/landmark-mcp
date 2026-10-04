@@ -62,9 +62,10 @@ interface NumberProblem {
   /**
    * `conflicting`: the column shows both conventions. `guessed`: nothing decided it and
    * the familiar reading was kept. `borrowed`: the rest of the file decided it, and the
-   * reading differs from the familiar one.
+   * reading differs from the familiar one. `money`: a Vietnamese heading naming an
+   * amount of money decided it.
    */
-  readonly problem: 'conflicting' | 'guessed' | 'borrowed';
+  readonly problem: 'conflicting' | 'guessed' | 'borrowed' | 'money';
   readonly example: string | null;
   readonly convention: Convention;
 }
@@ -74,9 +75,31 @@ interface NumberProblem {
  * "Số tiền (đồng)". It settles the column's ambiguous numbers the way a sign on the
  * value does — a currency has two minor digits at most, so "45.000" under "Giá (VNĐ)"
  * is forty-five thousand dong. The words are matched whole: "Đơn giá" starts with a
- * đ that is not the dong.
+ * đ that is not the dong. The dong without its marks, "dong", is also a name — a rep
+ * called Dong Li heads his own column in a sheet of sales by rep — so it counts only
+ * where a currency goes: "(dong)", "in dong", "Amount, dong".
  */
-const HEADING_CURRENCY = /[$£€¥₫]|(?<![\p{L}\p{N}])(?:VNĐ|VND|USD|EUR|GBP|đồng|đ)(?![\p{L}\p{N}])/iu;
+const HEADING_CURRENCY =
+  /[$£€¥₫]|(?<![\p{L}\p{N}])(?:VNĐ|VND|USD|EUR|GBP|đồng|đ)(?![\p{L}\p{N}])|(?:\(\s*dong\s*\)|(?<![\p{L}\p{N}])in\s+dong|[,/]\s*dong)(?![\p{L}\p{N}])/iu;
+
+/**
+ * A Vietnamese heading that names an amount of money: "Số tiền", "Thành tiền", "Đơn giá",
+ * "Lương", "Chi phí", "Doanh thu". In a file written in Vietnamese, where the dot groups
+ * thousands and the dong has no minor unit, "45.000" under one of these is forty-five
+ * thousand dong. Read with the dot as a decimal point, a household's spending sheet —
+ * the most ordinary file this audience has — totalled 685 where it spent 685 thousand.
+ * Not "Tỷ giá", an exchange rate, nor "Chỉ số giá", a price index, which have decimals,
+ * nor "Đánh giá", a rating. "Giá trị" is a value of any kind — "Giá trị đo", a
+ * measurement — and names money only with what it is the value of: "Giá trị hợp đồng".
+ */
+const VN_MONEY_HEADING =
+  /(?<![\p{L}\p{N}])(?:tiền|(?<!(?:tỷ|tỉ|đánh|chỉ\s+số)\s+)giá(?!\s+trị(?![\p{L}\p{N}]))|giá\s+trị\s+(?:hợp\s+đồng|đơn\s+hàng|giao\s+dịch|hóa\s+đơn|hoá\s+đơn|thanh\s+toán|tài\s+sản|hàng\s+hóa|hàng\s+hoá|còn\s+lại)|lương|chi\s+phí|phí|doanh\s+thu|doanh\s+số|lợi\s+nhuận|thu\s+nhập|chi\s+tiêu|phụ\s+cấp|thưởng|thực\s+lĩnh|thực\s+nhận|tạm\s+ứng|ngân\s+sách|số\s+dư|công\s+nợ)(?![\p{L}\p{N}])/iu;
+/**
+ * A heading that names a rate, a score or a coefficient, whatever money word follows:
+ * "Tỷ lệ phí" (a fee rate), "Điểm thưởng" (bonus points), "Hệ số lương" (a salary
+ * coefficient), "Phí (%)". Those carry decimals: "1.125" there is one and an eighth.
+ */
+const VN_NOT_MONEY = /^(?:tỷ\s+lệ|tỉ\s+lệ|điểm|hệ\s+số|chỉ\s+số|lãi\s+suất)(?![\p{L}\p{N}])|%/iu;
 
 /**
  * Settle each column's decimal convention, and rewrite the values whose reading it
@@ -98,6 +121,7 @@ function settleNumbers(
   width: number,
   file: FileNumbers,
   headings: readonly string[],
+  vietnamese: boolean,
 ): { problems: NumberProblem[]; conventions: (Convention | null)[] } {
   const problems: NumberProblem[] = [];
   const conventions: (Convention | null)[] = [];
@@ -114,12 +138,30 @@ function settleNumbers(
       const dotted = /\.\d{3}\b/.test(own.example ?? '');
       convention = file.convention ?? 'dot';
       let problem: NumberProblem['problem'] | null;
-      if (HEADING_CURRENCY.test(headings[i] ?? '')) {
+      const heading = (headings[i] ?? '').normalize('NFC');
+      if (HEADING_CURRENCY.test(heading)) {
         // The heading names a currency: the one mark in "45.000" groups thousands.
         convention = dotted ? 'comma' : 'dot';
         problem = null;
       } else if (convention === 'comma') {
         problem = 'borrowed';
+      } else if (
+        dotted &&
+        vietnamese &&
+        // The file's own figures write the dot as a decimal point ("2.5 kg"), and that
+        // evidence outranks a heading's wording.
+        !(file.from === 'values' && file.convention === 'dot') &&
+        VN_MONEY_HEADING.test(heading) &&
+        !VN_NOT_MONEY.test(heading.trim())
+      ) {
+        // The heading names money in a Vietnamese file: the dot groups thousands. Said
+        // aloud unless every such value ends in ".000", which nobody writes for 45.
+        convention = 'comma';
+        const thousands = allRows.every((row) => {
+          const v = row[i] ?? null;
+          return typeof v !== 'string' || readNumber(v)?.style !== 'ambiguous' || /\.000(?!\d)/.test(v);
+        });
+        problem = thousands ? null : 'money';
       } else if (dotted) {
         // "1.234" read as one point two: only the file's own dot decimals make that
         // safe. A comma delimiter does not — a sheet in Vietnamese exports "45.000".
@@ -207,8 +249,27 @@ function fileNumbersOf(read: ReadResult): FileNumbers {
  * file in Vietnamese writes its dates day first.
  */
 const VIETNAMESE = /[ăđơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/iu;
-/** Money written the way day-first countries write it. */
-const LOCAL_MONEY = /[₫€]|(?<![\p{L}\p{N}])(?:VNĐ|VND|đồng)(?![\p{L}\p{N}])/iu;
+/**
+ * Money written the way day-first countries write it. "dong" without its marks only
+ * after a figure, "45.000 dong": on its own it is a name — Dong Li, Kim Dong-hyun — and
+ * one such rep in an American sales sheet turned every "02/03/2026" into 2 March.
+ */
+const LOCAL_MONEY = /[₫€]|(?<![\p{L}\p{N}])(?:VNĐ|VND|đồng)(?![\p{L}\p{N}])|\d\s?dong(?![\p{L}\p{N}])/iu;
+
+/**
+ * Is the file written in Vietnamese? Judged by the lines above the first figure on each
+ * sheet — the title and the headings — not by the names in the records: an American
+ * sales sheet with reps called Bảo and Dũng still writes its dates month first.
+ */
+function vietnameseHeadings(read: ReadResult): boolean {
+  for (const sheet of read.sheets) {
+    for (const row of sheet.grid) {
+      if (row.some((v) => typeof v === 'number' || v instanceof Date || asNumber(v) !== null || asDate(v) !== null)) break;
+      if (row.some((v) => typeof v === 'string' && VIETNAMESE.test(v.trim()))) return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Which way round the file as a whole writes its dates, for columns whose own values
@@ -220,21 +281,13 @@ const LOCAL_MONEY = /[₫€]|(?<![\p{L}\p{N}])(?:VNĐ|VND|đồng)(?![\p{L}\p{N
  * semicolon delimiter or comma decimals, dong or euro amounts, or Vietnamese headings.
  * A date anywhere that only fits month first keeps the file month first.
  */
-function fileDateOrder(read: ReadResult, numbers: FileNumbers): 'dmy' | null {
+function fileDateOrder(read: ReadResult, numbers: FileNumbers, vietnamese: boolean): 'dmy' | null {
   let dayFirst = 0;
   let monthFirst = 0;
   let dotted = 0;
   let local = 0;
-  let vietnamese = 0;
   for (const sheet of read.sheets) {
-    // The language is judged by the lines above the first figure — the title and the
-    // headings — not by the names in the records: an American sales sheet with reps
-    // called Bảo and Dũng still writes its dates month first.
-    let heading = true;
     for (const row of sheet.grid) {
-      if (row.some((v) => typeof v === 'number' || v instanceof Date || asNumber(v) !== null || asDate(v) !== null)) {
-        heading = false;
-      }
       for (const v of row) {
         if (typeof v !== 'string') continue;
         const t = v.trim();
@@ -248,12 +301,11 @@ function fileDateOrder(read: ReadResult, numbers: FileNumbers): 'dmy' | null {
           continue;
         }
         if (LOCAL_MONEY.test(t)) local++;
-        if (heading && VIETNAMESE.test(t)) vietnamese++;
       }
     }
   }
   if (monthFirst > 0 && dayFirst === 0) return null;
-  if (dayFirst > 0 || dotted > 0 || local > 0 || vietnamese > 0) return 'dmy';
+  if (dayFirst > 0 || dotted > 0 || local > 0 || vietnamese) return 'dmy';
   return read.delimiter === ';' || numbers.convention === 'comma' ? 'dmy' : null;
 }
 
@@ -264,6 +316,7 @@ function buildRegionIndex(
   titleAbove: string | null,
   file: FileNumbers,
   fileDates: 'dmy' | null,
+  vietnamese: boolean,
 ): { region: IndexRegion; warnings: string[] } {
   const resolved = resolveMerges(sheet.grid as Grid, sheet.merges);
   const analysis = analyseHeader(
@@ -301,7 +354,7 @@ function buildRegionIndex(
   const headings = Array.from({ length: width }, (_, i) =>
     headingRows.map((row) => (row[i] === null || row[i] === undefined ? '' : String(row[i]))).join(' '),
   );
-  const settled = settleNumbers(allRows, width, file, headings);
+  const settled = settleNumbers(allRows, width, file, headings, vietnamese);
   const numberProblems = settled.problems;
   const m = materialise(allRows, raw.startRow, raw.firstCol, analysis.chosen.rows, fileDates ?? 'mdy');
 
@@ -375,7 +428,12 @@ function buildRegionIndex(
     // Read as a decimal point, or as a thousands separator, under the chosen convention.
     const decimal = (mark === 'dot') === (convention === 'dot');
     const how = decimal ? `with the ${mark} as a decimal point` : `with the ${mark} separating thousands`;
-    const where = problem === 'borrowed' ? ', as the rest of the file writes them' : '';
+    const where =
+      problem === 'borrowed'
+        ? ', as the rest of the file writes them'
+        : problem === 'money'
+          ? ', since the heading names an amount of money'
+          : '';
     const otherwise = decimal
       ? `If the ${mark} separates thousands there, those figures are a thousand times larger.`
       : `If the ${mark} is a decimal point there, those figures are a thousand times smaller.`;
@@ -458,6 +516,268 @@ function loneText(sheet: ReadSheet, row: number, region: { firstCol: number; las
 }
 
 /**
+ * A line that names the document. In Vietnamese the kind of document comes first:
+ * "BẢNG LƯƠNG THÁNG 9/2026", "Báo cáo doanh thu", "Danh sách học sinh". In English it
+ * comes last, in a short line: "Income Statement", "Inventory Report — Warehouse 2",
+ * "Q3 Payroll". A long line that merely mentions a report — "Source: finance team
+ * monthly report", "Exported from the inventory system" — is not one.
+ */
+const VN_DOCUMENT = /^(?:bảng|báo\s+cáo|danh\s+sách|sổ|phiếu|bản\s+kê|tổng\s+hợp|kế\s+hoạch|dự\s+toán|thống\s+kê)(?![\p{L}\p{N}])/iu;
+const EN_DOCUMENT = /^(?:report|statement|summary|schedule|ledger|register|budget|invoice|inventory|payroll|roster|timesheet|gradebook)$/iu;
+
+/**
+ * A line that names who issued the document — a company, an office, the national
+ * motto at the head of every Vietnamese form — and one that says what the figures are
+ * measured in or when they were taken. Neither is a title while another line is.
+ */
+const ISSUER_LINE =
+  /^(?:công\s+ty|cty|tổng\s+công\s+ty|tập\s+đoàn|ngân\s+hàng|chi\s+nhánh|cửa\s+hàng|trường|ủy\s+ban|uỷ\s+ban|ubnd|sở|bộ|phòng|cộng\s+hòa|cộng\s+hoà|độc\s+lập)(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])(?:inc|ltd|llc|plc|corp|corporation|company|co|gmbh|jsc|limited)\.?$/iu;
+const META_LINE = /^(?:đơn\s+vị\s+tính|đvt|đơn\s+vị|unit|units|currency|exported|printed|generated|as\s+of|ngày|date|kỳ|period)(?![\p{L}\p{N}])/iu;
+/** "Budget owner: Jane Doe", "Địa chỉ: 12 Lê Lợi": a short label, then what it labels. */
+const LABELLED_LINE = /^[^:]{1,30}:\s*\S/u;
+/** A whole date: "30/09/2026", "2026-09-30", "ngày 30 tháng 9", "30 September 2026". */
+const DATE_IN_LINE =
+  /(?<!\d)\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}(?!\d)|(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)|ngày\s+\d{1,2}\s+tháng|(?<!\d)\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+\d{4}|(?<![\p{L}\p{N}])(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}/iu;
+/**
+ * Who made it, not what it is: "Prepared by Finance", "… generated by J. Smith". Not
+ * "Sales by Region": "by" names a person only after a verb of making, or before
+ * initials.
+ */
+const BY_NAME =
+  /(?<![\p{L}\p{N}])(?:prepared|generated|compiled|created|exported|printed|submitted|approved|reviewed|made|written|updated|issued|signed|owned|maintained)\s+by(?![\p{L}\p{N}])/iu;
+const BY_INITIALS = /(?<![\p{L}\p{N}])by\s+(?:\p{Lu}\.\s?)+\p{Lu}/u;
+
+/**
+ * A line that reads as a title at all: not an issuer, a unit or date line, a source or
+ * note, a "Label: value" pair, a dated line, or a byline.
+ */
+function titleLike(line: string): boolean {
+  const l = line.normalize('NFC').trim();
+  return !(
+    ISSUER_LINE.test(l) ||
+    META_LINE.test(l) ||
+    NOTE_LEAD.test(l) ||
+    LABELLED_LINE.test(l) ||
+    DATE_IN_LINE.test(l) ||
+    BY_NAME.test(l) ||
+    BY_INITIALS.test(l)
+  );
+}
+
+const isDocumentLine = (line: string): boolean => {
+  const l = line.normalize('NFC').trim();
+  if (!titleLike(l)) return false;
+  if (VN_DOCUMENT.test(l)) return true;
+  const words = l.match(/\p{L}+/gu) ?? [];
+  return words.length <= 8 && words.slice(-3).some((w) => EN_DOCUMENT.test(w));
+};
+
+/** A unit, date or source line: what it says is about the figures, not their name. */
+const metaLine = (line: string): boolean => {
+  const l = line.normalize('NFC').trim();
+  return META_LINE.test(l) || NOTE_LEAD.test(l);
+};
+
+/**
+ * Which of a report's heading lines is its title.
+ *
+ * The first, unless the first names who issued the report. On the standard Vietnamese
+ * report the first line is the company or the national motto: "CÔNG TY TNHH ABC" over
+ * "BẢNG LƯƠNG THÁNG 9/2026", so the table was spoken of by its issuer's name and its
+ * real title kept as a note. Then a line that names the document wins; failing that,
+ * the first line that reads as a title; failing that, the first line. Under any other
+ * first line — "Sales by Region" over "Report generated 30/09/2026 by J. Smith" — the
+ * first line stays the title, since what comes under a title is about it. The others
+ * stay notes, in their order.
+ */
+function pickTitle(lines: readonly string[]): { title: string; rest: string[] } {
+  let at = 0;
+  if (ISSUER_LINE.test(lines[0]!.normalize('NFC').trim())) {
+    at = lines.findIndex(isDocumentLine);
+    if (at < 0) at = lines.findIndex(titleLike);
+    if (at < 0) at = 0;
+  }
+  return { title: lines[at]!, rest: lines.filter((_, k) => k !== at) };
+}
+
+/**
+ * The lines a report is signed off with. Who prepared, received or approved it — "Người
+ * lập biểu", "Người nhận tiền", "Prepared by", "Approved by:" — where to sign, "(Ký, họ
+ * tên)", and the date and place, "Hà Nội, ngày 30 tháng 9 năm 2026". Each is the whole
+ * cell, or the whole cell up to a colon or a bracket: "Approved by board" is a task's
+ * status, not a sign-off.
+ */
+const SIGNER =
+  /^(?:(?:tm|kt|tl|tuq|q|p)\.\s*)?(?:người\s+(?:lập(?:\s+(?:biểu|bảng|phiếu))?|nhận(?:\s+(?:tiền|hàng))?|giao(?:\s+hàng)?|duyệt|kiểm\s+tra|nộp(?:\s+tiền)?|mua\s+hàng|bán\s+hàng|đại\s+diện)|lập\s+biểu|xác\s+nhận(?:\s+của\s+.+)?|(?:prepared|approved|checked|reviewed|verified|authori[sz]ed|received|certified|submitted|signed)\s+by)\s*(?::.*|\(.*\))?$/isu;
+const SIGN_HERE =
+  /^\(\s*(?:ký|đã\s+ký|signature|signed|sign)(?![\p{L}\p{N}]).*\)$|^ký(?:\s+tên|,?\s+(?:ghi\s+rõ\s+)?họ\s+tên)(?![\p{L}\p{N}])|^signature\s*:?$/isu;
+const SIGN_DATE = /ngày\s*(?:\d{1,2}|[.…_]+)\s*tháng\s*(?:\d{1,2}|[.…_]+)\s*năm/iu;
+/**
+ * A job title that signs a Vietnamese report: "Kế toán trưởng", "Thủ quỹ", "Giám đốc",
+ * "KT. GIÁM ĐỐC". Each is as often a record's position beside a name, so it counts only
+ * in a row where every other cell signs off too, and only beside a line that is plainly
+ * a sign-off.
+ */
+const SIGNING_TITLE =
+  /^(?:(?:tm|kt|tl|tuq|q|p)\.\s*)?(?:(?:phó\s+)?(?:tổng\s+)?giám\s+đốc|ban\s+giám\s+đốc|kế\s+toán(?:\s+trưởng)?|thủ\s+trưởng(?:\s+đơn\s+vị)?|thủ\s+quỹ|thủ\s+kho|trưởng\s+(?:phòng|ban|bộ\s+phận)(?:\s+\S+){0,3}|hiệu\s+trưởng|chủ\s+tịch|giáo\s+viên\s+chủ\s+nhiệm)\s*(?::.*|\(.*\))?$/isu;
+
+/** What a cell of a sign-off row is: a plain sign-off line, a title, a date, or not one. */
+function signOffKind(v: CellValue): 'line' | 'title' | 'date' | null {
+  if (v instanceof Date) return 'date';
+  if (typeof v !== 'string' || asNumber(v) !== null) return null;
+  const t = v.normalize('NFC').trim();
+  if (SIGNER.test(t) || SIGN_HERE.test(t) || SIGN_DATE.test(t)) return 'line';
+  return SIGNING_TITLE.test(t) ? 'title' : null;
+}
+
+/**
+ * Is this row part of a sign-off, judged as a row? Every filled cell must sign off —
+ * "Người lập biểu | Kế toán trưởng | Giám đốc", "(Ký, họ tên) | (Ký, họ tên)" — so a
+ * record whose position is "Kế toán trưởng" beside the name "Chi" stays a record. The
+ * counts of its plain sign-off lines and of all its sign-off cells, or null.
+ *
+ * Except a name written in the cell after its own sign-off label: "Prepared by: | Jordan
+ * Lee | Approved by: | Sam Park". Each label and its name are one sign-off line. Not
+ * read as one, the names became records — "list the categories" named Jordan Lee — or,
+ * after a blank row, a second table every answer apologised for.
+ */
+function signOffRow(cells: readonly { v: CellValue }[]): { lines: number; cells: number } | null {
+  let lines = 0;
+  let count = 0;
+  let named = false;
+  for (const f of cells) {
+    const kind = signOffKind(f.v);
+    if (kind === null) {
+      // The name beside a label that asks for one; a figure or a second word is not.
+      if (!named || typeof f.v !== 'string' || asNumber(f.v) !== null || asDate(f.v) !== null) return null;
+      named = false;
+      continue;
+    }
+    named = kind === 'line' && typeof f.v === 'string' && SIGNER_LABEL.test(f.v.normalize('NFC').trim());
+    if (kind === 'date') continue;
+    count++;
+    if (kind === 'line') lines++;
+  }
+  return count > 0 ? { lines, cells: count } : null;
+}
+
+/** A sign-off label that a name is written beside: "Prepared by:", "Approved by", "Signature:". */
+const SIGNER_LABEL =
+  /^(?:(?:prepared|approved|checked|reviewed|verified|authori[sz]ed|received|certified|submitted|signed)\s+by|người\s+(?:lập(?:\s+(?:biểu|bảng|phiếu))?|nhận(?:\s+(?:tiền|hàng))?|giao(?:\s+hàng)?|duyệt|kiểm\s+tra)|signature|chữ\s+ký)\s*:?$/iu;
+
+/** Text, or a date: what a sign-off is written in. A figure means it is not one. */
+const signOffCell = (v: CellValue): boolean => v instanceof Date || (typeof v === 'string' && asNumber(v) === null);
+
+/**
+ * Do these rows, top to bottom, read as a sign-off block? It opens with a sign-off row,
+ * holds at least two sign-off cells, one of them plainly so, and at most two other
+ * rows — the names written under the titles. A second small table under the first,
+ * "Order | Status" over "Received by customer", opens with its headings and is kept.
+ */
+function signOffBlock(rows: readonly (readonly { v: CellValue }[])[]): boolean {
+  let lines = 0;
+  let cells = 0;
+  let other = 0;
+  let opened = false;
+  for (const row of rows) {
+    if (!row.length) continue;
+    const s = signOffRow(row);
+    if (!opened && !s) return false;
+    opened = true;
+    if (s) {
+      lines += s.lines;
+      cells += s.cells;
+    } else {
+      other++;
+    }
+  }
+  return lines >= 1 && cells >= 2 && other <= 2;
+}
+
+/**
+ * Is everything left on the sheet the report's sign-off?
+ *
+ * A Vietnamese payroll ends with the date, "Người lập biểu", "Kế toán trưởng", "Giám
+ * đốc", "(Ký, họ tên)" and the names, set apart by blank columns. Each block became a
+ * table of its own: the file "held 4 tables", describe named three that do not exist,
+ * and every answer added "That covers only the first of 4 tables". It is the sign-off
+ * when everything left is a few lines of text that read as one, taken row by row
+ * across the blocks — or when a sign-off was already found on this sheet, and these
+ * are no more than two rows of names under it.
+ */
+function signOffRest(sheet: ReadSheet, rest: readonly RawRegion[], signing: boolean): boolean {
+  // A sign-off is a handful of blocks; asking this of a long run of them at every step
+  // would be quadratic in a sheet of scattered notes.
+  if (rest.length > 12) return false;
+  for (const r of rest) {
+    if (r.endRow - r.startRow + 1 > 6) return false;
+    for (let row = r.startRow; row <= r.endRow; row++) {
+      if (!filledCells(sheet, row, r).every((f) => signOffCell(f.v))) return false;
+    }
+  }
+  const top = Math.min(...rest.map((r) => r.startRow));
+  const bottom = Math.max(...rest.map((r) => r.endRow));
+  const rows: { v: CellValue }[][] = [];
+  for (let row = top; row <= bottom; row++) {
+    rows.push(rest.filter((r) => r.startRow <= row && row <= r.endRow).flatMap((r) => filledCells(sheet, row, r)));
+  }
+  if (signing) return rows.filter((row) => row.length && !signOffRow(row)).length <= 2;
+  return signOffBlock(rows);
+}
+
+/**
+ * A sign-off typed straight under the last row, with no blank line between: the first
+ * row of it, or null. It is the run of text-only rows at the bottom, from its highest
+ * sign-off row down, when that reads as a sign-off block — in a table with figures
+ * above it, and with at least a heading and a record left.
+ */
+function attachedSignOff(sheet: ReadSheet, region: RawRegion): number | null {
+  let top: number | null = null;
+  for (let row = region.endRow; row > region.startRow + 1; row--) {
+    const filled = filledCells(sheet, row, region);
+    if (!filled.length || !filled.every((f) => signOffCell(f.v))) break;
+    if (signOffRow(filled)) top = row;
+  }
+  if (top === null) return null;
+  const rows: { v: CellValue }[][] = [];
+  for (let row = top; row <= region.endRow; row++) rows.push(filledCells(sheet, row, region));
+  if (!signOffBlock(rows)) return null;
+  return numberColumns(sheet, top, region).size > 0 ? top : null;
+}
+
+/**
+ * The sign-off as one note, read row by row as it is laid out. "(Ký, họ tên)" says
+ * where to sign, not who did, and is left out. A merged cell arrives repeated in each
+ * cell it covers and is said once; the same name under two titles is said twice.
+ */
+function signOffText(sheet: ReadSheet, regions: readonly RawRegion[]): string {
+  const top = Math.min(...regions.map((r) => r.startRow));
+  const bottom = Math.max(...regions.map((r) => r.endRow));
+  const lines: string[] = [];
+  for (let row = top; row <= bottom; row++) {
+    const cells: string[] = [];
+    let last = -2;
+    const across = regions.filter((r) => r.startRow <= row && row <= r.endRow).sort((a, b) => a.firstCol - b.firstCol);
+    for (const r of across) {
+      for (const f of filledCells(sheet, row, r)) {
+        const text = f.v instanceof Date ? speakDate(f.v) : f.text;
+        const repeated = f.c === last + 1 && cells[cells.length - 1] === text;
+        last = f.c;
+        if (/^\(.*\)$/u.test(text) || repeated) continue;
+        // "Prepared by:" and the name beside it are one line: "Prepared by: Jordan Lee".
+        if (cells.length && /:$/u.test(cells[cells.length - 1]!) && signOffKind(f.v) === null) {
+          cells[cells.length - 1] = `${cells[cells.length - 1]} ${text}`;
+          continue;
+        }
+        cells.push(text);
+      }
+    }
+    if (cells.length) lines.push(cells.join('; '));
+  }
+  return lines.join('. ');
+}
+
+/**
  * A single non-blank row sitting immediately above a region, spanning fewer columns
  * than the region, is a title — the "Q3 Regional Sales" line. Consume it so it does
  * not get mistaken for a header row, and use it as the region's spoken name.
@@ -496,7 +816,8 @@ function extractTitle(
       notes.push(line);
       next++;
     }
-    return { title: lone, startRow: next, notes };
+    const picked = pickTitle([lone, ...notes]);
+    return { title: picked.title, startRow: next, notes: picked.rest };
   }
 
   // A single cell set in from the left of a wider table is a title centred by hand.
@@ -529,6 +850,49 @@ function textLines(sheet: ReadSheet, found: RawRegion): string[] | null {
     lines.push(line);
   }
   return lines;
+}
+
+/**
+ * A line of a document's heading: who issued it, the national motto under it, a
+ * "Label: value" line, a line that names the document, or a unit or date line.
+ */
+const headingLine = (line: string): boolean => {
+  const l = line.normalize('NFC').trim();
+  return ISSUER_LINE.test(l) || MOTTO.test(l) || LABELLED_LINE.test(l) || isDocumentLine(l) || META_LINE.test(l) || DATE_IN_LINE.test(l);
+};
+/** The motto under "Cộng hòa xã hội chủ nghĩa Việt Nam", however it is dashed. */
+const MOTTO = /^độc\s+lập\s*[-–—]\s*tự\s+do\s*[-–—]\s*hạnh\s+phúc$/iu;
+
+/**
+ * The regions from `i` on that sit side by side in the same rows, when together they
+ * are a document's heading laid out across columns above a table: every one of them
+ * lone lines of text, every line a heading line, and a table below. Their lines, read
+ * row by row from left to right, and which regions they were; or null.
+ */
+function headingAcross(
+  sheet: ReadSheet,
+  raws: readonly RawRegion[],
+  i: number,
+): { lines: string[]; regions: number[] } | null {
+  const first = raws[i]!;
+  const group: number[] = [i];
+  let bottom = first.endRow;
+  for (let k = i + 1; k < raws.length && raws[k]!.startRow <= bottom; k++) {
+    group.push(k);
+    bottom = Math.max(bottom, raws[k]!.endRow);
+  }
+  if (group.length < 2) return null;
+  const below = raws.slice(group[group.length - 1]! + 1);
+  if (!below.some((r) => r.startRow > bottom && r.lastCol > r.firstCol)) return null;
+  const blocks = group.map((k) => ({ r: raws[k]!, lines: textLines(sheet, raws[k]!) }));
+  if (blocks.some((b) => b.lines === null || !b.lines.every(headingLine))) return null;
+  const lines: string[] = [];
+  for (let row = first.startRow; row <= bottom; row++) {
+    for (const b of [...blocks].sort((x, y) => x.r.firstCol - y.r.firstCol)) {
+      if (row >= b.r.startRow && row <= b.r.endRow) lines.push(b.lines![row - b.r.startRow]!);
+    }
+  }
+  return { lines, regions: group };
 }
 
 /** Sources, notes and footnotes start like this, in English and in Vietnamese. */
@@ -617,7 +981,8 @@ export function buildTable(read: ReadResult): IndexTable {
   const warnings = [...read.warnings];
   const notes: string[] = [];
   const fileNumbers = fileNumbersOf(read);
-  const fileDates = fileDateOrder(read, fileNumbers);
+  const vietnamese = vietnameseHeadings(read);
+  const fileDates = fileDateOrder(read, fileNumbers, vietnamese);
   const sheetIds = new Set<string>();
 
   for (const sheet of read.sheets) {
@@ -636,8 +1001,40 @@ export function buildTable(read: ReadResult): IndexTable {
     // Numbered by the tables actually emitted, so a title or note consumed along the
     // way does not leave the first real table called "t2".
     let emitted = 0;
+    // A sign-off has been found on this sheet; what follows it is names and signatures.
+    let signing = false;
+    let signedOff = false;
+    const noteOf = (text: string): string => `A note on sheet "${sheet.name}" reads: "${clip(text)}".`;
 
+    // Regions already read as part of a heading laid out across columns.
+    const consumed = new Set<number>();
     raws.forEach((found, i) => {
+      if (signedOff || consumed.has(i)) return;
+      // A heading block laid out in two columns above the first table — the company over
+      // its department on the left, the national motto on the right; or "Employee: …"
+      // beside "Department: …" — is one heading, read row by row across the columns.
+      // Each column used to become a table of its own: the file opened on a one-row table
+      // named after the company, and every answer began "In table 2".
+      if (emitted === 0 && titleBelow === null) {
+        const across = headingAcross(sheet, raws, i);
+        if (across !== null) {
+          across.regions.forEach((k) => consumed.add(k));
+          const picked = pickTitle(across.lines);
+          titleBelow = picked.title;
+          for (const line of picked.rest) notes.push(noteOf(line));
+          return;
+        }
+      }
+      // Everything left under the last table is its sign-off: one note, not tables.
+      const rest = raws.slice(i);
+      if (emitted > 0 && signOffRest(sheet, rest, signing)) {
+        if (titleBelow !== null) notes.push(noteOf(titleBelow));
+        titleBelow = null;
+        const text = signOffText(sheet, rest);
+        if (text) notes.push(noteOf(text));
+        signedOff = true;
+        return;
+      }
       // A line of text on its own is not a table. Above a table, after a blank row,
       // it is that table's title: read as a region of its own it became "table 1",
       // a one-cell table that hid the real one. Anywhere else — a source, a note, a
@@ -646,9 +1043,9 @@ export function buildTable(read: ReadResult): IndexTable {
       // sheet holding nothing else keeps its one line as the table it is.
       //
       // Several such lines together — a company, a report title, a unit line — are the
-      // heading block of the table under them: the first line is its title, the rest
-      // are kept as notes. Anywhere but above a table, a block of several lines stays
-      // the one-column table it may well be.
+      // heading block of the table under them: the line that names the report is its
+      // title, the rest are kept as notes. Anywhere but above a table, a block of
+      // several lines stays the one-column table it may well be.
       const lines = raws.length > 1 ? textLines(sheet, found) : null;
       const next = raws[i + 1];
       const heads =
@@ -660,13 +1057,20 @@ export function buildTable(read: ReadResult): IndexTable {
         !NOTE_LEAD.test(lines[0]!) &&
         (lines.length === 1 || next.lastCol > next.firstCol);
       if (lines !== null && (lines.length === 1 || heads)) {
-        if (titleBelow !== null) notes.push(`A note on sheet "${sheet.name}" reads: "${clip(titleBelow)}".`);
+        const picked = heads ? pickTitle(lines) : null;
+        // A unit or source line nearer the table does not displace a title further up;
+        // anything else is the nearer table's own caption, and wins, as it always has.
+        if (picked && titleBelow !== null && metaLine(picked.title)) {
+          for (const line of lines) notes.push(noteOf(line));
+          return;
+        }
+        if (titleBelow !== null) notes.push(noteOf(titleBelow));
         titleBelow = null;
-        if (heads) {
-          titleBelow = lines[0]!;
-          for (const line of lines.slice(1)) notes.push(`A note on sheet "${sheet.name}" reads: "${clip(line)}".`);
+        if (picked) {
+          titleBelow = picked.title;
+          for (const line of picked.rest) notes.push(noteOf(line));
         } else {
-          notes.push(`A note on sheet "${sheet.name}" reads: "${clip(lines[0]!)}".`);
+          notes.push(noteOf(lines[0]!));
         }
         return;
       }
@@ -675,17 +1079,28 @@ export function buildTable(read: ReadResult): IndexTable {
       const extracted = extractTitle(sheet, raw);
       if (extracted.startRow > raw.endRow) return; // a title with nothing under it
       raw = { ...raw, startRow: extracted.startRow };
-      // The table's own title row wins; a line further above is then a note.
+      // The table's own title row wins, unless it is only a unit or source line ("Đơn vị
+      // tính: đồng") under a title further up; the other is then a note.
+      let title = extracted.title ?? titleBelow;
       if (titleBelow !== null && extracted.title !== null) {
-        notes.push(`A note on sheet "${sheet.name}" reads: "${clip(titleBelow)}".`);
+        const above = metaLine(extracted.title);
+        title = above ? titleBelow : extracted.title;
+        notes.push(noteOf(above ? extracted.title : titleBelow));
       }
-      for (const line of extracted.notes) notes.push(`A note on sheet "${sheet.name}" reads: "${clip(line)}".`);
-      const title = extracted.title ?? titleBelow;
+      for (const line of extracted.notes) notes.push(noteOf(line));
       titleBelow = null;
 
       // Notes typed directly under the last row, with no blank line between. At
-      // least a heading and one record stay, whatever the notes look like.
+      // least a heading and one record stay, whatever the notes look like. A sign-off
+      // typed there is one note, and the names under it, further down, are its own.
       const trailing: string[] = [];
+      const signedAt = raw.lastCol > raw.firstCol ? attachedSignOff(sheet, raw) : null;
+      if (signedAt !== null) {
+        const text = signOffText(sheet, [{ ...raw, startRow: signedAt }]);
+        if (text) trailing.push(text);
+        raw = { ...raw, endRow: signedAt - 1 };
+        signing = true;
+      }
       while (raw.lastCol > raw.firstCol && raw.endRow > raw.startRow + 1) {
         const note = noteRow(sheet, raw.endRow, raw);
         if (note === null) break;
@@ -694,7 +1109,7 @@ export function buildTable(read: ReadResult): IndexTable {
       }
       for (const note of trailing) notes.push(`A note under a table on sheet "${sheet.name}" reads: "${clip(note)}".`);
 
-      const built = buildRegionIndex(sheet, raw, `${sheetId}.t${++emitted}`, title, fileNumbers, fileDates);
+      const built = buildRegionIndex(sheet, raw, `${sheetId}.t${++emitted}`, title, fileNumbers, fileDates, vietnamese);
       regions.push(built.region);
       warnings.push(...built.warnings);
     });

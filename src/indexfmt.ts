@@ -64,9 +64,11 @@ export interface IndexColumn {
   /**
    * Set on a column of identifiers written in digits: `phone` for phone numbers, `code`
    * for the rest. A phone number typed as "0912345678" has to find the 912345678 Excel
-   * stored, and neither kind is the name a row should be spoken by.
+   * stored, and neither kind is the name a row should be spoken by. `row` marks the
+   * column that numbers the rows ("STT" over 1, 2, 3): it keeps its number kind, so a
+   * range filter compares numbers, but has no sum, min, max or mean.
    */
-  readonly identifier?: 'phone' | 'code';
+  readonly identifier?: 'phone' | 'code' | 'row';
   /**
    * Set when the column's numbers use the comma as their decimal point ("1.234,50",
    * "45.000 ₫"), so a filter value written the same way ("30.000") is read that way

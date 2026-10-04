@@ -1,6 +1,6 @@
 # Product feedback
 
-Updated September 27, 2026. One entry for each tool, API, SDK or body of documentation this
+Updated October 4, 2026. One entry for each tool, API, SDK or body of documentation this
 project actually used, each answering the same five questions. Everything here can be checked
 against the repository, its tests, the pages linked, or the [friction log](FRICTION-LOG.md).
 Where something was never measured, such as how long onboarding took, I say so rather than
@@ -27,41 +27,50 @@ The accessibility page's "input parity" (voice only, without touching the screen
 without voice) is one reason the voice page has a typed-question box that is always visible.
 
 **What needs work.** Five documentation problems, each in the friction log. The lifecycle
-example uses revision 2025-03-26 without saying why (entry 1). The partner-only status is
-missing from the setup pages a developer lands on (entry 2). The service-token scopes contradict
-each other (entry 3). The requirements hold the add-on to its spoken reply while the design
-guide says the add-on cannot script it (entry 4). And the accessibility checks can only be run
-on a device (entry 5).
+example uses revision 2025-03-26 without saying why (entry 1). The partner-only status is on
+the docs home but missing from the overview and setup pages a developer following the guide
+lands on (entry 2). The service-token scopes contradict each other (entry 3). The requirements
+hold the add-on to its spoken reply while the design guide says the add-on cannot script it
+(entry 4). And the accessibility checks can only be run on a device (entry 5).
 
 **How onboarding felt.** Not timed. I reached a working, tested MCP server on my own, but not an
-Alexa "hello world": the toolkit is partner-only, which I learned for certain from the hackathon
-FAQ rather than from the setup pages.
+Alexa "hello world": the toolkit is partner-only, which the docs home says and the setup pages
+do not, and which the hackathon FAQ made plain for entrants.
 
 **Would I build with it again?** Yes for the public MCP route these pages describe. For the
 private toolkit I cannot say; I never had access to it.
 
-## MCP specification 2025-11-25 and the TypeScript SDK 1.30.0
+## MCP specification 2025-11-25 and the TypeScript SDK (1.30.0, then 1.32.0)
 
 **What I used it for.** The whole server: `McpServer` with nine tools, one `ui://` resource and
 server instructions, served through `WebStandardStreamableHTTPServerTransport`, stateless per
 request, with JSON responses. The tests also use the SDK's own `Client` and
-`StreamableHTTPClientTransport` against the server.
+`StreamableHTTPClientTransport` against the server. The project used SDK 1.30.0 until October
+4, 2026, and 1.32.0 since, both pinned exactly.
 
 **What worked well.** The Web-standard transport takes a `Request` and returns a `Response`, so
 one handler (`createHandler` in `src/server.ts`) runs unchanged on Cloudflare Workers and behind
-a small Node adapter; the deployed path and the tested path are the same code. SDK 1.30.0
-negotiates 2025-11-25 out of the box, and a test pins it. `enableJsonResponse: true` gives one
-complete response per call. The SDK's client echoes an `Mcp-Session-Id` it is given, so two SDK
-clients were kept apart with no configuration, and after a 405 on GET an idle client stopped
-asking for an event stream (both in `test/transport.test.ts`). The server, its first eight tools
-and the Streamable HTTP endpoint were committed on September 9, the day after the project's first
-commit.
+a small Node adapter; the deployed path and the tested path are the same code. Both SDK
+versions negotiate 2025-11-25 out of the box, and a test pins it. The upgrade to 1.32.0 needed
+no code change. `enableJsonResponse: true` gives one complete response per call. The SDK's
+client echoes an `Mcp-Session-Id` it is given, so two SDK clients were kept apart with no
+configuration, and after a 405 on GET an idle client stopped asking for an event stream (both
+in `test/transport.test.ts`). The server, its first eight tools and the Streamable HTTP
+endpoint were committed on September 9, the day after the project's first commit.
 
 **What needs work.**
 
 - Arguments that fail the schema are refused before any handler runs, as text with no
   `structuredContent`, and the method that builds that reply is `private`. A voice host has
-  nothing to say. I replaced it through a cast, which may break on upgrade (friction log 7).
+  nothing to say. I replaced it through a cast, which may break on upgrade (friction log 7). It
+  survived the upgrade to 1.32.0, where the reply and the private method are unchanged.
+- In 1.30.0, a `tools/call` that left out the optional `arguments` was refused, even when it
+  came from the SDK's own client, so "what tables do I have" failed on any host that sends the
+  name alone. 1.32.0 fixed it; the main line had the fix in January (friction log 11).
+- Three security advisories published between September 30 and October 2 cover 1.30.0, and on
+  October 4 none of them was in the database `npm audit` reads. None was reachable in this
+  server, but nothing would have told a user of `npm audit` about them
+  ([SECURITY-NOTES.md](SECURITY-NOTES.md)).
 - Closing a per-request transport too early returns HTTP 200 with an empty body and no error
   anywhere (friction log 6).
 - Every `McpServer` builds its own JSON Schema validator unless one is passed in. With a server
@@ -78,7 +87,7 @@ commit.
 
 **How onboarding felt.** Not timed. The installed version could be exercised locally without a
 network; a fresh install from the lockfile (`npm ci`) completed in the September 27 end-to-end
-check.
+check. Moving from 1.30.0 to 1.32.0 on October 4 took a version change and nothing else.
 
 **Would I build with it again?** Yes, pinned to a known version, with the transport's lifetime
 handled as above and client-level tests.
@@ -119,7 +128,7 @@ shape and `z.object()` (friction log 8). Out-of-range input never reaches a hand
 
 **What needs work.** Nothing in Zod itself. Its refusal messages ("String must contain at most 5
 character(s)") reach the caller through the SDK's refusal text, which is the SDK issue above. I
-keep Zod on the 3.x line the SDK version expects.
+keep Zod on the 3.x line; both SDK versions used accept 3.25 or 4.
 
 **How onboarding felt.** Not timed. It came in with the SDK.
 
@@ -144,7 +153,9 @@ object shapes (formulas, rich text, hyperlinks, errors); my adapter turned some 
 rich-text links and error cells never become \"[object Object]\""). That was my bug, but the
 variety is worth a table in the documentation. `npm audit` reports a moderate `uuid` advisory
 through ExcelJS whose code path Landmark never reaches, and its suggested fix is a major
-downgrade ([SECURITY-NOTES.md](SECURITY-NOTES.md)).
+downgrade. High-severity `brace-expansion` advisories published in late September came in
+through ExcelJS's `archiver` dependency; a lockfile-only `npm audit fix` cleared them
+([SECURITY-NOTES.md](SECURITY-NOTES.md)).
 
 **How onboarding felt.** Not timed.
 
@@ -171,29 +182,36 @@ inference, not by the parser.
 
 **Would I build with it again?** Yes, for this kind of offline use.
 
-## Cloudflare Workers, Wrangler 4.134.0 and Durable Objects
+## Cloudflare Workers, Wrangler (4.134.0, then 4.147.0) and Durable Objects
 
 **What I used it for.** The deployment target: a Worker (`src/worker.ts`) serving the MCP
 endpoint and the voice page as static assets, with two SQLite-backed Durable Object classes, one
 per conversation and one per answer, declared with the `exports` form in `wrangler.jsonc`. It
 was run with `wrangler dev --local`, `wrangler deploy --dry-run` and `wrangler check startup`.
-It has not been deployed.
+It has not been deployed. Wrangler was moved from 4.134.0 to 4.147.0 on October 4, because the
+older one's `miniflare` pulled in an `undici` with new high-severity advisories.
 
 **What worked well.** The same Web-standard handler runs in the Worker. A dry run of this build
 listed both Durable Object bindings, with no ids to create or paste, and a bundle of about
-970 KiB (195 KiB gzipped). Under `wrangler dev --local` the page, `/health` (reporting
+1,000 KiB (204 KiB gzipped). Under `wrangler dev --local` the page, `/health` (reporting
 `"state": "durable"`), the 405, the Origin check and a real tool call all behaved as on Node, and
 the Durable Object state survived a restart that reused the same `--persist-to` directory: an
 answer given before the restart was explained after it, from another conversation. In the
 September 27 end-to-end check on this machine, `wrangler dev` was ready in about 6 seconds and
-a warm `table_query` round trip took 45–58 ms (median).
+a warm `table_query` round trip took 45–58 ms (median). On October 4, with Wrangler 4.147.0,
+`/health` again reported `"state": "durable"`, and the SDK 1.32.0 client negotiated
+2025-11-25, listed nine tools and called four of them, two with no arguments at all.
 
 **What needs work.** KV looked like the obvious store, but Cloudflare's own pages say it is
 eventually consistent, with changes taking up to 60 seconds or more to reach other locations,
 and the free plan allows 1,000 writes a day. That does not fit an answer written on one request
 and read back on the next; Durable Objects do. `wrangler check startup` measured 68–96 ms of
 active startup CPU in two local runs, and says itself that local CPU differs from Cloudflare's,
-so the free plan's 10 ms per-request limit could not be checked before deploying. The Worker
+so the free plan's 10 ms per-request limit could not be checked before deploying. Every RPC
+call on a Durable Object stub counts against the free plan's 100,000 Durable Object requests a
+day, a separate limit from the Worker's own 100,000 requests. The pricing page says so plainly,
+but it changed the abuse arithmetic: with up to three such calls per tool call, that limit is
+reached first ([SECURITY-NOTES.md](SECURITY-NOTES.md)). The Worker
 entry imports `cloudflare:workers`, which Node's test runner cannot load, so the state logic had
 to be split into Node-safe files to be tested. `wrangler deploy --dry-run` writes a `.wrangler/`
 folder into the project, which needs to be in `.gitignore` (it is).
@@ -231,9 +249,9 @@ the page's own speech turned off have not been tried with this build.
 the local server, the ingest command and the test suite (`node --test`); `tsc` does the type
 check and the build for `npm start`.
 
-**What worked well.** No build step for development or tests. `npm test` runs all 439 tests in
-about 13–18 seconds on this machine, and `npm run typecheck` is clean. The suite also passes under
-other time zones.
+**What worked well.** No build step for development or tests. `npm test` runs all 615 tests in
+about 14–20 seconds on this machine (four runs on October 4), and `npm run typecheck` is clean.
+The suite also passes under other time zones.
 
 **What needs work.** Node's type stripping rejects some syntax that TypeScript 5.7.2 accepts and
 cannot flag, because `--erasableSyntaxOnly` arrived in TypeScript 5.8. Node's documentation says

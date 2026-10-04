@@ -133,7 +133,7 @@ test('"how many units" is the units, not the number of rows', async () => {
 test('"how many tables are in this file" counts the tables, not the rows', async () => {
   const t = await ask(THREE, 'how many tables are in this file');
   assert.equal(t.plan.tool, undefined);
-  assert.equal(t.spoken, '05 three regions has one sheet, holding 3 tables. Say "table 2" to open the second.');
+  assert.equal(t.spoken, 'Mixed sheet has one sheet, holding 3 tables. Say "table 2" to open the second.');
 });
 
 // ── conditions ──────────────────────────────────────────────────────────────
@@ -246,15 +246,19 @@ test('naming a file with a question in it answers the question', async () => {
   await open('');
   const t = await say('the population of vietnam in the countries table');
   assert.equal(t.payload?.['result'], 100352192);
-  assert.match(t.spoken, /^In 06 countries\. 100,352,192\./);
+  assert.match(t.spoken, /^In Countries\. 100,352,192\./);
 });
 
 test('before any file is open, a question names the files it could be about', async () => {
   await open('');
   const t = await say("what's the q2 revenue for south");
-  assert.equal(t.spoken, 'Which file? Q2 Revenue is in 02 stacked header and 03 merged header.');
+  assert.equal(t.spoken, 'Which file? Q2 Revenue is in Quarterly data and Compare sheet.');
   const answered = await say('the stacked header one');
   assert.equal(answered.payload?.['result'], 950);
+  // Answered in the words just heard, too.
+  await open('');
+  await say("what's the q2 revenue for south");
+  assert.equal((await say('the quarterly one')).payload?.['result'], 950);
 });
 
 // ── the rest of the words people use ────────────────────────────────────────
@@ -407,7 +411,7 @@ test('help, start over and stop are not questions about the table', async () => 
   assert.match(help.spoken, /^Ask for a total, an average, the highest or lowest, a count, or a breakdown/);
   assert.equal((await say('help')).spoken, help.spoken);
   // Describing a table nobody chose names it first.
-  assert.match((await say('okay')).spoken, /^In 01 flat\. This table has 5 rows/);
+  assert.match((await say('okay')).spoken, /^In Sales data\. This table has 5 rows/);
 
   await open(BUDGET);
   await say('total amount for engineering');
@@ -447,7 +451,8 @@ test('a workbook with its own title is called by it, not by its file name', asyn
   // The list names it the same way, so one file is not heard under two names.
   await open('');
   const list = await say('what do I have');
-  assert.equal(list.spoken, 'You have 01 flat, 02 stacked header, 03 merged header, FY2026 Departmental Budget and 05 three regions. There is 1 more.');
+  // Every file by a name a person would give it, not by a test fixture's file name.
+  assert.equal(list.spoken, 'You have Sales data, Quarterly data, Compare sheet, FY2026 Departmental Budget and Mixed sheet. There is 1 more.');
 });
 
 // ── what the last check found ───────────────────────────────────────────────

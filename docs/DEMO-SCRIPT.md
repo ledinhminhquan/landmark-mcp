@@ -1,6 +1,6 @@
 # Demo video — script and recording plan
 
-Updated September 27, 2026. **Target running time: 2:50** (170 seconds, 12 shots). The rules
+Updated October 4, 2026. **Target running time: 2:52** (172 seconds, 12 shots). The rules
 require a video under three minutes, publicly visible on YouTube or Vimeo, in English, with no
 third-party trademarks or copyrighted music unless the entrant has permission
 ([official rules](https://amazonappdev2026.devpost.com/rules)).
@@ -11,13 +11,18 @@ The five exchanges below are not a plan for what the product might say. They are
 now: `test/demo.test.ts` drives the page's own router against the real MCP handler and fails if
 any of the five replies changes by one character. The same sequence was also entered into the
 real page of this build, served by the local server, through its typed-question path, and
-every reply matched.
+every reply matched (last checked October 4).
 
 The story is one budget review. Ask for a department's total, ask where it came from, change
-department, ask again, then hear both totals. A real answer is heard before 0:15. The budget
-file is opened before the take and the opener says so on screen. The video makes no claim of
-Alexa device integration, of persistence across sessions, of an MCP Apps widget on screen, of
-measured user benefit, or of being first.
+department, ask again, then hear both totals. A real answer is heard before 0:15. The
+narration that follows it, starting at 0:15, says first why this is not something a chatbot
+already does: a chatbot can guess at a spreadsheet, while Landmark works the answer out from
+the cells and can name them. The organizers have said that something which is "a latent
+capability of modern LLMs" would likely score poorly on Design and Quality of the Idea, so
+that contrast comes before anything else is explained. The budget file is opened before the
+take and the opener says so on screen. The video makes no claim of Alexa device integration,
+of persistence across sessions, of an MCP Apps widget on screen, of measured user benefit, or
+of being first.
 
 **The one rule for the whole video:** never say "as you can see". The product is for people
 who cannot. If a sentence only works because the viewer is looking at the screen, rewrite it.
@@ -52,17 +57,17 @@ product's own speech. Never re-voice a reply yourself.
 
 | Voice | Words spoken |
 |---|---:|
-| Narrator | **196** |
+| Narrator | **206** |
 | User questions | **19** |
 | Product replies | **71** |
-| All voices | **286** |
+| All voices | **296** |
 
-The narration has 194 written words. "MCP" is said as three letters, which makes 196 spoken
+The narration has 204 written words. "MCP" is said as three letters, which makes 206 spoken
 words. Product replies are counted as they are pronounced: "560 thousand" is "five hundred and
 sixty thousand", "C3" is "C three".
 
-At 150 words a minute all speech needs about 114 seconds, which leaves about 56 seconds of the
-170 for response time, breaths and holds. Spread over its own time slot, no narration passage
+At 150 words a minute all speech needs about 118 seconds, which leaves about 54 seconds of the
+172 for response time, breaths and holds. Spread over its own time slot, no narration passage
 needs more than 116 words a minute. That is a timing budget, not a measurement of anyone's
 voice: rehearse the real audio. Never overlap the narrator and the product, and never cut the
 product's words to fit.
@@ -86,43 +91,47 @@ the evidence.
 | 00:04–00:06 | 01 · User | Total amount for engineering. | 4 | Press **Ask by voice**, wait for the tone, speak. The recognised words appear in the conversation panel. **Design, Tech Implementation** |
 | 00:06–00:08 | 01 · Silence | — | 0 | The real "Working…" state; nothing replaces the response. |
 | 00:08–00:15 | 01 · Product | 560 thousand. That is the total of Amount across 3 rows. | 14 | The whole reply plays and its text is on screen. The product has answered before 0:15. **Tech Implementation** |
-| 00:15–00:29 | 02 · Narrator | Landmark is a browser voice prototype for blind and low vision spreadsheet users. This demonstration uses a synthetic budget and a local MCP server. | 26 | Hold the answer and the inset. Caption: *Intended users: blind and low-vision spreadsheet users.* **Potential Impact** |
-| 00:29–00:31 | 03 · User | How do you know? | 4 | Same conversation; no cell is selected or named. **Design, Quality of the Idea** |
-| 00:31–00:33 | 03 · Silence | — | 0 | Real processing state. |
-| 00:33–00:40 | 03 · Product | That came from C3 through C5 on Budget. Each one is Amount. | 14 | Show the real reply. Highlight C3, C4 and C5 in the inset, labelled *Source-data annotation*. **Quality of the Idea** |
-| 00:40–00:57 | 04 · Narrator | The file merges Engineering across three rows. Landmark resolves that shared label, adds the three amounts, and keeps their cell addresses with the answer. Here are the same source cells. | 30 | Enlarge the inset: A3:A5 merged "Engineering"; C3 = 480000, C4 = 62000, C5 = 18000. Keep row numbers visible. **Tech Implementation, Quality of the Idea** |
-| 00:57–00:59 | 05 · User | Total amount for design. | 4 | Back to the page; only the department changes. **Design** |
-| 00:59–01:01 | 05 · Silence | — | 0 | Real processing state. |
-| 01:01–01:09 | 05 · Product | 234 thousand. That is the total of Amount across 2 rows. | 15 | The different total, spoken and on screen. **Design, Tech Implementation** |
-| 01:09–01:11 | 06 · User | How do you know? | 4 | The same short follow-up, with no filename, amount or cell in it. **Design** |
-| 01:11–01:13 | 06 · Silence | — | 0 | Real processing state. |
-| 01:13–01:20 | 06 · Product | That came from C6 through C7 on Budget. Each one is Amount. | 14 | The inset now highlights C6 and C7, not C3 to C5. **Design, Quality of the Idea** |
-| 01:20–01:37 | 07 · Narrator | The follow up now checks Design. It uses the latest answer, so the listener does not repeat a filename or a cell range. Both the question and its evidence can be heard. | 32 | Show both question-and-explanation pairs in the conversation panel. Caption: *Follow-up context: latest answer.* **Design, Quality of the Idea** |
-| 01:37–01:39 | 08 · User | Break it down. | 3 | Stay on the budget. **Design** |
-| 01:39–01:41 | 08 · Silence | — | 0 | Real processing state. |
-| 01:41–01:49 | 08 · Product | Engineering, 560 thousand and Design, 234 thousand. | 14 | Two departments, no wall of rows. **Design** |
-| 01:49–02:03 | 09 · Narrator | Two departments, one short answer. This is for someone reviewing a budget by audio, who needs both a result and a way to question it. | 25 | Hold the breakdown beside the two explanations. Caption: *Intended task: review and check a budget by audio.* No user-study or time-saving claim. **Potential Impact** |
-| 02:03–02:24 | 10 · Narrator | This recording uses real calls to the server. Initialization selects the protocol version shown here. The browser calls the query tool, receives its answer identifier, then calls explain with that identifier. | 31 | Three 7-second crops from the network log of the same take (see *Network proof* below). Caption: *Streamable HTTP · MCP 2025-11-25*. **Tech Implementation** |
-| 02:24–02:40 | 11 · Narrator | The prototype understands questions by rules, not a language model. Testing with blind and low vision users is the next step: can they check an answer and stay oriented using speech? | 31 | Back to the real page. Caption: *Rule-based routing · User testing not yet done.* No testimonials. **Potential Impact, Design** |
-| 02:40–02:48 | 12 · Narrator | Landmark gives a spoken answer and a way to check it against the source. | 14 | The last reply and its source cells together. No new feature, no title card. **Quality of the Idea** |
-| 02:48–02:50 | 12 · Silence | — | 0 | Hold the final working frame for two seconds and end. No outro. |
+| 00:15–00:31 | 02 · Narrator | A chatbot can guess at a spreadsheet. Landmark works the answer out from the cells, and can name them. It is a browser voice prototype for blind and low vision users. | 31 | Hold the answer and the inset. Caption: *Worked out from the cells · Intended users: blind and low-vision spreadsheet users.* The first narration answers "why not just ask a chatbot" before anything else, and the product has already answered. **Quality of the Idea, Potential Impact** |
+| 00:31–00:33 | 03 · User | How do you know? | 4 | Same conversation; no cell is selected or named. **Design, Quality of the Idea** |
+| 00:33–00:35 | 03 · Silence | — | 0 | Real processing state. |
+| 00:35–00:42 | 03 · Product | That came from C3 through C5 on Budget. Each one is Amount. | 14 | Show the real reply. Highlight C3, C4 and C5 in the inset, labelled *Source-data annotation*. **Quality of the Idea** |
+| 00:42–00:59 | 04 · Narrator | This synthetic budget merges Engineering across three rows. Landmark resolves that shared label, adds the three amounts, and keeps their cell addresses with the answer. Here are the same source cells. | 31 | Enlarge the inset: A3:A5 merged "Engineering"; C3 = 480000, C4 = 62000, C5 = 18000. Keep row numbers visible. **Tech Implementation, Quality of the Idea** |
+| 00:59–01:01 | 05 · User | Total amount for design. | 4 | Back to the page; only the department changes. **Design** |
+| 01:01–01:03 | 05 · Silence | — | 0 | Real processing state. |
+| 01:03–01:11 | 05 · Product | 234 thousand. That is the total of Amount across 2 rows. | 15 | The different total, spoken and on screen. **Design, Tech Implementation** |
+| 01:11–01:13 | 06 · User | How do you know? | 4 | The same short follow-up, with no filename, amount or cell in it. **Design** |
+| 01:13–01:15 | 06 · Silence | — | 0 | Real processing state. |
+| 01:15–01:22 | 06 · Product | That came from C6 through C7 on Budget. Each one is Amount. | 14 | The inset now highlights C6 and C7, not C3 to C5. **Design, Quality of the Idea** |
+| 01:22–01:39 | 07 · Narrator | The follow up now checks Design. It uses the latest answer, so the listener does not repeat a filename or a cell range. Both the question and its evidence can be heard. | 32 | Show both question-and-explanation pairs in the conversation panel. Caption: *Follow-up context: latest answer.* **Design, Quality of the Idea** |
+| 01:39–01:41 | 08 · User | Break it down. | 3 | Stay on the budget. **Design** |
+| 01:41–01:43 | 08 · Silence | — | 0 | Real processing state. |
+| 01:43–01:51 | 08 · Product | Engineering, 560 thousand and Design, 234 thousand. | 14 | Two departments, no wall of rows. **Design** |
+| 01:51–02:05 | 09 · Narrator | Two departments, one short answer. This is for someone reviewing a budget by audio, who needs both a result and a way to question it. | 25 | Hold the breakdown beside the two explanations. Caption: *Intended task: review and check a budget by audio.* No user-study or time-saving claim. **Potential Impact** |
+| 02:05–02:26 | 10 · Narrator | This recording uses real calls to a local MCP server. Initialization selects the protocol version shown here. The browser calls the query tool, receives its answer identifier, then calls explain with that identifier. | 35 | Three 7-second crops from the network log of the same take (see *Network proof* below). Caption: *Streamable HTTP · MCP 2025-11-25*. **Tech Implementation** |
+| 02:26–02:42 | 11 · Narrator | The prototype understands questions by rules, not a language model. Testing with blind and low vision users is the next step: can they check an answer and stay oriented using speech? | 31 | Back to the real page. Caption: *Rule-based routing · User testing not yet done.* No testimonials. **Potential Impact, Design** |
+| 02:42–02:50 | 12 · Narrator | Landmark gives a spoken answer and a way to check it against the source. | 14 | The last reply and its source cells together. No new feature, no title card. **Quality of the Idea** |
+| 02:50–02:52 | 12 · Silence | — | 0 | Hold the final working frame for two seconds and end. No outro. |
+
+The word counts are spoken words, so "MCP" counts as three in shot 10. Shot 02 used to say
+that the demonstration uses a synthetic budget and a local MCP server; those words now sit in
+shots 04 and 10, and the on-screen label says both throughout.
 
 **Optional spoken protocol line.** The protocol version is on screen in shot 10 but never said
 aloud, so a judge who only listens will not hear it. If you want it heard, replace the shot 10
-narration with: *"This recording uses real M C P calls to the server. Initialization selects
-protocol version twenty twenty-five, eleven, twenty-five. The browser calls the query tool,
-receives its answer identifier, then calls explain with that identifier."* That is 35 spoken
-words in 21 seconds (100 words a minute) and brings all voices to 290 words, about 116 seconds
-at 150 words a minute.
+narration with: *"This recording uses real M C P calls to a local server. Initialization
+selects protocol version twenty twenty-five, eleven, twenty-five. The browser calls the query
+tool, receives its answer identifier, then calls explain with that identifier."* That is 36
+spoken words in 21 seconds (103 words a minute) and brings all voices to 297 words, about 119
+seconds at 150 words a minute.
 
 ## Where the four criteria are shown
 
 | Criterion | Time | Evidence |
 |---|---|---|
-| Tech Implementation | 00:04–00:15; 00:40–00:57; 02:03–02:24 | A real tool reply; the merged label mapped to the three source cells; the real initialize → query → answer id → explain requests over `/mcp`. |
-| Design | 00:29–00:40; 00:57–01:20; 01:37–01:49 | A four-word follow-up retrieves the latest answer's source; changing department changes both the total and the source; the breakdown stays short. |
-| Potential Impact | 00:00–00:04; 00:15–00:29; 01:49–02:03; 02:24–02:40 | One specific job, checking a budget by audio, for a named audience. User testing is stated as not yet done. |
-| Quality of the Idea | 00:29–00:57; 01:09–01:37; 02:40–02:50 | Provenance tied to the answer: the same question moves from C3–C5 to C6–C7 after a new total. |
+| Tech Implementation | 00:04–00:15; 00:42–00:59; 02:05–02:26 | A real tool reply; the merged label mapped to the three source cells; the real initialize → query → answer id → explain requests over `/mcp`. |
+| Design | 00:31–00:42; 00:59–01:22; 01:39–01:51 | A four-word follow-up retrieves the latest answer's source; changing department changes both the total and the source; the breakdown stays short. |
+| Potential Impact | 00:00–00:04; 00:15–00:31; 01:51–02:05; 02:26–02:42 | One specific job, checking a budget by audio, for a named audience. User testing is stated as not yet done. |
+| Quality of the Idea | 00:15–00:59; 01:11–01:39; 02:42–02:52 | Set against a chatbot's guess in the first narration; provenance tied to the answer: the same question moves from C3–C5 to C6–C7 after a new total. |
 
 This shows evidence for each criterion. It cannot show adoption or accessibility benefit; that
 needs testing with blind and low-vision users, which has not happened. Do not add "proven
@@ -149,11 +158,11 @@ as host names, so open `http://localhost:8787/`.
 
 The page opens by connecting and asking "what do I have" on its own. The conversation panel
 therefore starts with "Connected to landmark 0.1.0.", then that question, then a list of the
-bundled files: "You have 01 flat, 02 stacked header, 03 merged header, FY2026 Departmental
-Budget and 05 three regions. There is 1 more." Most are named after test fixtures; the budget
-is named by its own title. Those turns and the preparation turn are above the filmed exchanges
-in the panel. There is no button
-that clears the panel; a reload clears it but also clears the open table.
+bundled files: "You have Sales data, Quarterly data, Compare sheet, FY2026 Departmental Budget
+and Mixed sheet. There is 1 more." The titles come from `test/fixtures/titles.json`; the
+budget is called by the title written above its table. Those turns and the preparation turn
+are above the filmed exchanges in the panel. There is no button that clears the panel; a
+reload clears it but also clears the open table.
 
 ## Recording checklist (Windows 11, one person)
 
@@ -175,8 +184,9 @@ that clears the panel; a reload clears it but also clears the open table.
    page uses. In a browser without it, the page says so and asks for typed questions instead.
 5. Open `http://localhost:8787/`. Allow the microphone once, before recording.
 6. Zoom to 150% and press F11. On a 1920×1080 screen that lays the page out at 1280×720, the
-   size at which it was checked on September 27: the page itself does not scroll, the
-   conversation scrolls inside its panel, and the typed-question box stays at the bottom.
+   size at which it was checked on September 27 and again on October 4: the page itself does
+   not scroll, the conversation scrolls inside its panel, and the typed-question box stays
+   at the bottom.
    Full screen keeps browser branding out of the frame.
 7. Leave **Speak answers** ticked (it is on by default). Unticked, answers go to a screen reader
    instead of being spoken, which is the mode for screen-reader users, not for this video.
@@ -241,13 +251,13 @@ recognised speech. Suggested video description in that case:
 Before reloading for the master take, open DevTools → Network and tick **Preserve log**. Then
 take three 7-second crops from that same take, showing only request and response text:
 
-1. 02:03–02:10: the `initialize` response with `"protocolVersion": "2025-11-25"`, and the
+1. 02:05–02:12: the `initialize` response with `"protocolVersion": "2025-11-25"`, and the
    `Mcp-Session-Id` header the server returns with it; then a later POST to `/mcp` carrying the
    `mcp-protocol-version: 2025-11-25` header. The first initialize request does not carry that
    header, and it should not.
-2. 02:10–02:17: the `tools/call` for `table_query` (Department = Engineering, sum of Amount)
+2. 02:12–02:19: the `tools/call` for `table_query` (Department = Engineering, sum of Amount)
    and its result with `answer_id`.
-3. 02:17–02:24: the `tools/call` for `table_explain` with the same `answer_id`, and its cells
+3. 02:19–02:26: the `tools/call` for `table_explain` with the same `answer_id`, and its cells
    C3, C4, C5.
 
 Answer ids look like `a1-` followed by 16 hex characters and change on every run; use the pair
@@ -291,7 +301,7 @@ whole table, C3–C5 highlighted, C6–C7 highlighted.
 
 **Export and upload**
 
-17. Export 1080p, 30 fps, MP4. Confirm the duration is under 3:00 (2:50 is 5,100 frames) and
+17. Export 1080p, 30 fps, MP4. Confirm the duration is under 3:00 (2:52 is 5,160 frames) and
     that the first answer has finished before 0:15.
 18. Watch it once listening without looking, and once muted with captions.
 19. YouTube Studio: *No, it's not made for kids*; visibility **Public** (the rules say publicly
@@ -311,7 +321,7 @@ whole table, C3–C5 highlighted, C6–C7 highlighted.
 | A take overruns its slot | Retake at the planned pace, or trim holds in the edit. | Never speed up speech or cut the product's words. The export stays under 3:00. |
 
 **Local or hosted.** This plan records against the local server, and the on-screen label and
-the shot 02 narration say so. If you record against a deployed Worker instead, change "local"
+the shot 10 narration say so. If you record against a deployed Worker instead, change "local"
 to "hosted" in both places (the word count does not change), and first check that the
 deployment's `/health` reports `"state": "durable"`. The Worker has been run only under
 `wrangler dev` on this machine; nothing has been deployed yet.

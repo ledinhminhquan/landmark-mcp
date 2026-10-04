@@ -300,6 +300,66 @@ test('health says whether state is durable, and creates no conversation', async 
   assert.equal(made, 0, 'a health probe with a session header created a store');
 });
 
+// ── calls without arguments ─────────────────────────────────────────────────
+
+test('a tool call that leaves out `arguments` is answered, as the specification allows', async () => {
+  // The 2025-11-25 schema makes `arguments` optional on tools/call, and a host may send
+  // only the name for a tool that needs nothing. SDK 1.30.0 validated the missing field
+  // as `undefined` against the tool's object schema and refused it as "Required", so the
+  // first thing anyone asks — what tables do I have — and "pick up where I left off"
+  // both failed, and were spoken as "name a column from the description". The voice
+  // client always sends `arguments: {}`, so only hand-built and third-party calls hit it.
+  const handler = createHandler({ index });
+  const bare = async (name: string, headers: Record<string, string> = {}) => {
+    const message = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name } };
+    assert.ok(!('arguments' in message.params), 'the request under test must omit the field');
+    const res = await post(handler, message, headers);
+    assert.equal(res.status, 200, name);
+    const body = (await res.json()) as {
+      error?: unknown;
+      result?: { isError?: boolean; structuredContent?: Record<string, unknown> };
+    };
+    assert.equal(body.error, undefined, `${name}: ${JSON.stringify(body.error)}`);
+    const spoken = String(body.result?.structuredContent?.['spoken']);
+    assert.notEqual(body.result?.isError, true, `${name} was refused: ${spoken}`);
+    return spoken;
+  };
+
+  assert.match(await bare('table_list'), /^You have 01 flat\b/);
+  // With nothing saved, resume says so rather than failing ...
+  assert.equal(await bare('table_resume'), 'Nothing is saved yet.');
+  // ... and with a bookmark, a bare resume goes back to the most recent one.
+  const as = { 'x-landmark-session': 'no-arguments' };
+  assert.equal((await tool(handler, 'table_bookmark', { name: 'my place', table_id: '01-flat', row: 3 }, as)).isError, false);
+  assert.match(await bare('table_resume', as), /row 3/);
+});
+
+test('the SDK client can call a tool with no arguments at all', async () => {
+  // The SDK client sends `params` as given, so `callTool({ name })` puts no `arguments`
+  // on the wire: the same request as above, from the client MCP Inspector, Claude Code
+  // and mcp-remote are built on.
+  const handler = createHandler({ index });
+  const calls: { params?: Record<string, unknown> }[] = [];
+  const recording = async (r: Request) => {
+    if (r.method === 'POST') {
+      const message = (await r.clone().json()) as { method?: string; params?: Record<string, unknown> };
+      if (message.method === 'tools/call') calls.push(message);
+    }
+    return handler(r);
+  };
+  const { client } = await sdkClient(recording);
+  try {
+    for (const name of ['table_list', 'table_resume']) {
+      const r = (await client.callTool({ name })) as { isError?: boolean; structuredContent?: Record<string, unknown> };
+      assert.notEqual(r.isError, true, `${name} was refused: ${String(r.structuredContent?.['spoken'])}`);
+    }
+  } finally {
+    await client.close();
+  }
+  assert.equal(calls.length, 2);
+  for (const c of calls) assert.ok(c.params && !('arguments' in c.params), JSON.stringify(c));
+});
+
 // ── bodies ──────────────────────────────────────────────────────────────────
 
 test('a JSON-RPC batch is refused rather than run', async () => {

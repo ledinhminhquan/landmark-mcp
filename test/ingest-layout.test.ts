@@ -188,10 +188,11 @@ test('a heading block of several lines above a blank row is the title of the tab
   ]]);
   assert.equal(t.regions.length, 1, 'table 1 was a one-column table called "Công TY tnhh ABC"');
   const r = t.regions[0]!;
-  assert.equal(r.title, 'CÔNG TY TNHH ABC');
+  // The line that names the report is its title; the company that issued it is a note.
+  assert.equal(r.title, 'BÁO CÁO DOANH THU THÁNG 9/2026', 'was "CÔNG TY TNHH ABC"');
   assert.equal(r.id, 'bao-cao.t1');
   assert.equal(r.columns[3]!.sum, 13025000);
-  assert.ok(t.warnings.some((w) => /BÁO CÁO DOANH THU THÁNG 9\/2026/.test(w)), 'the second line is kept as a note');
+  assert.ok(t.warnings.some((w) => /CÔNG TY TNHH ABC/.test(w)), 'the company line is kept as a note');
   assert.ok(!t.warnings.some((w) => /separate tables/.test(w)));
 
   // A merged title and a merged unit line, as Excel's "Merge & Center" writes them.
@@ -226,9 +227,10 @@ test('a second title line straight above the headings is a note, not a heading l
     ['North', 120, 24000],
     ['South', 80, 16000],
   ]]);
-  assert.equal(r.regions[0]!.title, 'Acme Corp');
+  // The company that issued the report is not its title, and is kept as a note.
+  assert.equal(r.regions[0]!.title, 'Regional Sales, Q3 2026', 'was "Acme Corp"');
   assert.deepEqual(r.regions[0]!.columns.map((c) => c.spoken), ['Region', 'Units', 'Revenue'], 'was "Regional Sales, Q3 2026, Region"');
-  assert.ok(r.warnings.some((w) => /Regional Sales, Q3 2026/.test(w)));
+  assert.ok(r.warnings.some((w) => /Acme Corp/.test(w)));
 });
 
 test('a block of lines that heads no table stays a table', () => {

@@ -438,11 +438,12 @@ test('a question with no table open asks which file, then answers it', async () 
   // "Open a table first — say, what do I have", which changed nothing when followed.
   const ask = await say('what is the total revenue');
   assert.match(ask.routed.speak ?? '', /^Which file\?/);
-  assert.match(ask.routed.speak ?? '', /01 flat/);
+  assert.match(ask.routed.speak ?? '', /Sales data/);
 
+  // The file's old name, from its file name, still reaches it.
   const answer = await say('the flat one');
   assert.equal(answer.payload['result'], 61050);
-  assert.match(answer.spoken, /^In 01 flat\./);
+  assert.match(answer.spoken, /^In Sales data\./);
 });
 
 // ── phrasings that aggregated the wrong column ──────────────────────────────

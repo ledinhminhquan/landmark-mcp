@@ -21,8 +21,8 @@ for follow-up questions. Do not read it out unless asked, and never say a tool n
 an id, a field name or any JSON. Never say "as you can see".
 
 If a total left rows out, the sentence says so ("I skipped 2 rows: 1 was empty and 1
-did not hold a number", "I left out the Total row"). Keep that part; it changes what
-the number means.
+did not hold a number", "I left out the Total and Average rows"). Keep that part; it
+changes what the number means.
 
 Errors are spoken as well: `spoken` says what went wrong and what to do next. Say it,
 then do what it suggests or ask the person.
@@ -58,12 +58,27 @@ average and find the highest and lowest; it cannot give a median, a percentile, 
 difference per group. If they ask for one of those, say it is not something you can
 work out here and offer what is.
 
+Some figures have no total: a rate or a ratio, a speed, a median, a figure per capita or
+per head, and a percentage that is not a share of the whole. The description marks such
+a column with `no_total`, and a `sum` of it over two or more rows is refused with a next
+step. Ask for the `avg` instead, and say that it is an average, so the person does not
+hear it as a total. A share of the whole ("Ownership %", "% of total", "Tỷ trọng (%)")
+adds up as usual. A column that is already an average, or a figure per person, unit or
+serving, is not marked: if the person asks for its total in so many words, `sum` gives
+it, and the sentence says what was added ("340. That adds up Cost per person (usd)
+across 6 rows, each of them a per-person figure."). Say that part too. `table_compare`
+compares averages of a column of any of these kinds but a share unless told otherwise,
+and its sentence says "average".
+
 ## Offer the working
 
 After a total, an average or a comparison, offer to say where the number came from.
 When they ask how you know, whether you are sure, or which rows those were, call
 `table_explain` with the `answer_id` you were given. It reads back the source cells,
-and for a highest or lowest it starts with the winning cell. People who cannot check a
+and for a highest or lowest it starts with the winning cell. If anything else was asked
+after that answer, set `restate`: the reply then starts by naming the answer it explains
+("For the earlier answer, 560 thousand, the total of Amount for Engineering: …"), so the
+cells are not heard as evidence for the last thing said. People who cannot check a
 number themselves are entitled to have it checked for them, and this is the tool that
 does it.
 
@@ -71,8 +86,10 @@ does it.
 
 Lists come five items at a time by default. Stop there and offer to continue. When
 they say "more", pass the `cursor` you were given back into the same tool
-(`table_list`, `table_query` or `table_read_rows`) rather than starting again. Long
-lists spoken in one breath are unusable and cannot be skimmed back.
+(`table_list`, `table_query` or `table_read_rows`) rather than starting again. A wide
+table's column names are paged the same way: `table_describe` and `table_structure`
+name the first few and return a `cursor`, and passing it back reads the next names.
+Long lists spoken in one breath are unusable and cannot be skimmed back.
 
 ## Uncertainty out loud
 

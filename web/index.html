@@ -9,6 +9,10 @@
     --bg: #0a0e14;
     --panel: #121821;
     --edge: #1e2836;
+    /* The edge of a control, which unlike --edge has to be seen: at least 3:1 against
+       the page, the panel and the text box's own fill (3.74:1 on the panel). The box's
+       fill is almost the panel's colour, so this line is all that shows where it is. */
+    --line: #62748e;
     --ink: #e6edf3;
     --dim: #8b9bb0;
     --ring: #37b6ff;
@@ -30,7 +34,10 @@
     .device, .panel { min-height: 0; }
     .device { overflow-y: auto; }
   }
-  @media (max-width: 860px) { .app { grid-template-columns: 1fr; } }
+  /* minmax(0, …), not 1fr: a bare 1fr track never shrinks below its widest content,
+     which was the 260px ring plus its padding, so at 320px the whole page scrolled
+     sideways. The ring shrinks to fit instead (below, after the ring's own rule). */
+  @media (max-width: 860px) { .app { grid-template-columns: minmax(0, 1fr); } }
 
   .sr-only {
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
@@ -94,9 +101,13 @@
     font: inherit; padding: .7rem 1.4rem; border-radius: 999px; cursor: pointer;
     background: var(--ring); color: #06121c; border: 0; font-weight: 600;
   }
-  button.ghost { background: transparent; color: var(--ink); border: 1px solid #3a4a60; font-weight: 400; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 400; }
   button:disabled { opacity: .4; cursor: not-allowed; }
   button:focus-visible, input:focus-visible, .log:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+  /* Inside the log's edge, not outside it. On a narrow screen, or a laptop zoomed to
+     150-200%, the log spans the full width and runs above and below the window once a
+     few turns are in, so a ring drawn outside it was entirely off screen. */
+  .log:focus-visible { outline-offset: -3px; }
 
   .toggle { display: inline-flex; gap: .55rem; align-items: center; cursor: pointer; }
   .toggle input { width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--ring); }
@@ -147,7 +158,7 @@
   .ask label { flex-basis: 100%; font-size: .8rem; color: var(--dim); }
   .ask input {
     flex: 1; min-width: 0; font: inherit; padding: .6rem .8rem; border-radius: 8px;
-    border: 1px solid #3a4a60; background: #0d131c; color: var(--ink);
+    border: 1px solid var(--line); background: #0d131c; color: var(--ink);
   }
   .ask input::placeholder { color: #7d8ba0; }
   .ask button { padding: .6rem 1.2rem; }
@@ -159,6 +170,8 @@
     /* One voice button at a time: the one that stays in reach. */
     .narrow-only { display: inline-block; }
     .controls #talk { display: none; }
+    /* At 320px the ring and the voice panel's padding no longer fit side by side. */
+    .puck { width: min(260px, 100%); height: auto; aspect-ratio: 1; }
   }
 </style>
 </head>
@@ -187,11 +200,18 @@
       <button id="stop" type="button" class="ghost">Interrupt</button>
     </div>
 
-    <label class="toggle"><input type="checkbox" id="speak-answers" checked> Speak answers</label>
+    <!-- The screen-reader advice is the box's description, so it is read on reaching the
+         box. As text after it, someone moving by Tab never met it: Tab goes from this box
+         to the conversation, past the hint. -->
+    <label class="toggle"><input type="checkbox" id="speak-answers" checked aria-describedby="speak-help"> Speak answers</label>
 
+    <!-- Space is qualified because it belongs to a focused control: said plainly,
+         "or Space" told someone who had just unticked Speak answers to press the key that
+         ticks it again. -->
     <p class="hint" id="hint">
-      Press <strong>Ask by voice</strong> or Space, wait for the tone, then speak. Esc stops.
-      Using a screen reader? Turn off <strong>Speak answers</strong> and it will read each answer to you.
+      Press <strong>Ask by voice</strong>, or Space when no button or box has focus, wait for the
+      tone, then speak. Esc stops.
+      <span id="speak-help">Using a screen reader? Turn off <strong>Speak answers</strong> and it will read each answer to you.</span>
       Try: <code>what's in the budget file</code> · <code>total amount for engineering</code> ·
       <code>how do you know</code> · <code>break it down</code>
     </p>
@@ -347,13 +367,22 @@ function showLatency(ms) {
   pill.className = `pill ${ms < 200 ? 'good' : ms < 500 ? 'warn' : 'bad'}`;
 }
 
+/** The write each region is still waiting to make, so a newer one can replace it. */
+const pendingWrite = new Map();
+
 /** Hand text to the person's own screen reader. Problems interrupt; answers wait their turn. */
 function announce(text, urgent = false) {
   const region = el(urgent ? 'alert' : 'announce');
   region.textContent = '';
   // Readers do not reliably re-read a region whose text did not change, so clear it
-  // and write on the next tick.
-  setTimeout(() => { region.textContent = text; }, 60);
+  // and write on the next tick. A write still waiting is dropped: the newer text is
+  // what is true now, and "Working on it" landing just after the answer it was
+  // waiting for would be read out second.
+  clearTimeout(pendingWrite.get(region));
+  pendingWrite.set(region, setTimeout(() => {
+    pendingWrite.delete(region);
+    region.textContent = text;
+  }, 60));
 }
 
 // ── speaking ───────────────────────────────────────────────────────────────
@@ -455,19 +484,40 @@ async function handle(said, confidence) {
   }
 }
 
+/** How long a question may go unanswered before a screen-reader user is told it is in hand. */
+const SLOW_MS = 1000;
+
 async function takeTurn(said, turn, confidence) {
   addTurn('You', said);
   setState('thinking');
+
+  // The ring's "Working…" is not announced (see #status), and locally an answer takes
+  // tens of milliseconds, so nothing needs saying. Over a slow network, a cold Worker or
+  // a server that is down, a screen-reader user heard nothing at all for seconds after
+  // asking. Said through their reader only: the page's own voice would be cut off by
+  // the answer, and the tones already tell a listener when the microphone closed.
+  const slow = setTimeout(() => {
+    if (turn === turnSeq && (!speakAnswers || !voice.canSpeak)) announce('Working on it.');
+  }, SLOW_MS);
 
   let result;
   try {
     await connected();
     result = await converse(said, callTool);
   } catch (err) {
+    // Now, not only in the finally: that runs once the error below has been said, which
+    // aloud takes seconds. Untick Speak answers meanwhile and the timer, still armed,
+    // announced "Working on it." over a question that had already failed.
+    clearTimeout(slow);
     if (turn !== turnSeq) return;
     addTurn('Landmark', `Something went wrong reaching the table. ${err.message}`, 'transport error');
     await respond('Something went wrong reaching the table. Check your connection, then ask again.', { urgent: true });
+    // The ring said "Ready" here, with the server unreachable. It says what the startup
+    // failure says; the next question's "Working…" clears it, whichever way that goes.
+    if (turn === turnSeq) setState('offline');
     return;
+  } finally {
+    clearTimeout(slow);
   }
 
   // Said as Escape: stop, and say nothing over whatever comes next.
@@ -534,9 +584,14 @@ const PROBLEMS = {
 const OTHER_PROBLEM = 'Listening stopped with an error. Press Ask by voice to try again, or type your question in the box.';
 
 function cannotListen() {
-  return voice.canSpeak
+  if (!voice.canSpeak) {
+    return "This browser can't listen or speak, so type your questions in the box. Answers appear in the conversation.";
+  }
+  // Firefox has speech but no recognition, so Firefox with a screen reader and Speak
+  // answers off is exactly who reads this; "still spoken" contradicted the switch they set.
+  return speakAnswers
     ? "This browser can't listen for speech, so type your questions in the box. Answers are still spoken."
-    : "This browser can't listen or speak, so type your questions in the box. Answers appear in the conversation.";
+    : "This browser can't listen for speech, so type your questions in the box. Answers go to your screen reader and appear in the conversation.";
 }
 
 voice.onstate = (s) => { if (s !== 'idle' || puck.dataset.state === 'listening') setState(s); };
@@ -609,11 +664,28 @@ document.addEventListener('keydown', (e) => {
   if (!talk.disabled) startListening();
 });
 
+// Keys that move focus, scroll, or only change another key. None is asking to hear
+// anything, and a screen-reader user presses them first: Tab and Shift+Tab to find
+// their way, Control to quiet their own reader. Matching Tab alone missed Shift+Tab,
+// which sends Shift first, and Control: after one Tab had unlocked speech, either
+// set this page's voice talking over the reader before Speak answers could be reached.
+// Chromium does not count a bare modifier as a gesture either.
+const NOT_A_REQUEST = new Set([
+  'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown',
+  'Shift', 'Control', 'Alt', 'AltGraph', 'Meta', 'OS', 'Super', 'Hyper', 'Fn', 'FnLock',
+  'CapsLock', 'NumLock', 'ScrollLock', 'Symbol', 'SymbolLock',
+]);
+
 // The first click or key press unlocks sound: iOS Safari will not speak otherwise, and
 // Chrome will not have spoken the opening answer. Say that answer now — unless the
 // press was the start of a question, or of turning speech off.
 function firstGesture(e) {
   if (e.type === 'keydown' && e.key === 'Escape') return; // not a gesture a browser counts
+  // The owed answer waits for a click or a key that does something.
+  if (e.type === 'keydown' && NOT_A_REQUEST.has(e.key)) return;
+  // Nothing the browser has counted as a gesture yet, so speaking would be refused and
+  // the answer owed again, with this listener gone and nothing left to say it.
+  if (navigator.userActivation?.hasBeenActive === false) return;
   document.removeEventListener('click', firstGesture, true);
   document.removeEventListener('keydown', firstGesture, true);
   wakeAudio();

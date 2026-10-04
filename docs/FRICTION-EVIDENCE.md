@@ -1,6 +1,6 @@
 # Evidence ledger and exclusions
 
-Updated September 27, 2026. This file says where each friction-log entry's evidence is, and what
+Updated October 4, 2026. This file says where each friction-log entry's evidence is, and what
 was withdrawn or narrowed along the way.
 
 The repository has 18 commits, from September 8 to September 18, 2026; the September 27 fixes
@@ -15,15 +15,16 @@ time is claimed anywhere.
 | Entry | Evidence | Qualification |
 |---|---|---|
 | 1. Lifecycle example revision | Overview (last updated Aug 3, 2026) and lifecycle page (Jul 10, 2026), read September 27; `test/wire.test.ts`: "negotiates exactly the revision the hackathon requires" | A documentation mismatch, not an observed Alexa negotiation failure. |
-| 2. Partner-only status missing from setup pages | Overview and setup pages; hackathon FAQ, read September 27 | No private CLI install, contact attempt or account rejection is claimed. |
+| 2. Partner-only status missing from setup pages | Overview and setup pages; hackathon FAQ, read September 27; overview, setup page and the add-on docs home re-read October 4 | The docs home does carry the partner-only notice; the entry is about the pages a developer following the guide lands on. No private CLI install, contact attempt or account rejection is claimed. |
 | 3. Service-token scopes | Authentication page: runtime-flow step 5 against the scope table and token requirements, re-checked September 27 | A documentation inconsistency, not a live security finding. |
 | 4. Who writes the spoken reply | Functional Requirements §2 and §9, "The Conversation Surface", "Tools, Schema, and Data Design" (all last updated Jul 21, 2026), read September 27 | How Alexa+ actually treats a `spoken` field is unknown; we could not run it. |
 | 5. Accessibility checks need a device | "Design Guide: Accessibility" and "Test Your Add-on Customer Experience" (Jul 21, 2026); hackathon FAQ; read September 27 | No device or simulator was available to try. |
-| 6. Transport closed too early | [Probe](feedback-evidence/probe.mjs) and [results](feedback-evidence/legacy-probe-results.json), September 13; re-run in a clean clone September 27 | The early-close failure reproduces with a delayed tool; SSE works when the transport is kept open. |
-| 7. Refused arguments | Reproduced September 27 with a throwaway script (steps in the entry); `createToolError` is declared `private` in `node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.d.ts`; `src/server.ts` (`speakRefusals`); `test/integration.test.ts` | The script is not committed; the entry gives enough to repeat it. |
+| 6. Transport closed too early | [Probe](feedback-evidence/probe.mjs) and [results](feedback-evidence/legacy-probe-results.json), September 13; re-run in a clean clone September 27, and against SDK 1.32.0 on October 4 | The early-close failure reproduces with a delayed tool; SSE works when the transport is kept open. The committed results are the SDK 1.30.0 run. |
+| 7. Refused arguments | Reproduced September 27 with a throwaway script (steps in the entry), and again October 4 with SDK 1.32.0; `createToolError` is declared `private` in `node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.d.ts` in both versions; `src/server.ts` (`speakRefusals`); `test/integration.test.ts` | The script is not committed; the entry gives enough to repeat it. |
 | 8. JSON Schema against Zod | Same probe results, schemas section; `src/mcp/tools.ts` | Both Zod forms work; the runtime already explains the JSON Schema refusal. The original compiler message was not kept. |
 | 9. ExcelJS merges | Same probe results, merges section; `src/ingest/read.ts`; `src/table/header.ts` | Only ExcelJS 4.4.0 was tested. |
-| 10. npm and PowerShell | Reproduced September 27 with a throwaway package (steps in the entry); `test/ingest-cli.test.ts` | PowerShell 7.6.6, npm 11.7.0, Node 23.11.0 on Windows 11 only. |
+| 10. npm and PowerShell | Reproduced September 27 with a throwaway package (steps in the entry); `test/ingest-cli.test.ts`; the `--titles` case run by hand in PowerShell on October 4 | PowerShell 7.6.6, npm 11.7.0, Node 23.11.0 on Windows 11 only. The `--titles` case has no automated test. |
+| 11. Tool call without `arguments` | Reproduced October 4 with throwaway scripts against SDK 1.30.0 and 1.32.0, over the Web-standard transport and with the SDK's own client in process (steps in the entry); `CallToolRequestParamsSchema` in the SDK's `dist/esm/types.js`; the SDK's pull requests #1404, #2045 and #2931 and issue #1869, read October 4; `test/transport.test.ts` | The scripts are not committed. Which real MCP hosts leave `arguments` out is untested. Found by a review of this project, not reported by a user. |
 
 To repeat the September 13 probes from the repository root:
 
@@ -34,8 +35,10 @@ node docs/feedback-evidence/probe.mjs
 It makes synthetic local tool calls, builds an in-memory workbook and invokes the installed
 compiler and runtime. It needs no network, installation or credentials. It **rewrites**
 `legacy-probe-results.json` and `probe-progress.txt` beside itself, so run it in a copy if you
-want the committed results left alone. Its expected negative cases are the errors being documented,
-not failing tests.
+want the committed results left alone. In this build it runs against SDK 1.32.0, but the
+`versions.sdk` field it writes is a fixed string, `1.30.0`, the version the committed results
+came from; check `node_modules/@modelcontextprotocol/sdk/package.json` for the version a re-run
+actually used. Its expected negative cases are the errors being documented, not failing tests.
 
 ## Withdrawn or narrowed statements
 
@@ -58,7 +61,9 @@ not failing tests.
 | The scripted demo cut its own speech short | Found by reading the code, then measured in a browser on September 27 before the fix. The page now waits for speech to end; it has not been re-timed with audio since. The demo script runs one line at a time anyway. |
 | Bookmarks last "across days, backed by KV" | Withdrawn. KV was never bound. On the Worker, state is now in Durable Objects; locally it is memory. |
 | "No cold start" on Workers | Not measured on Cloudflare; nothing is deployed. Locally, `wrangler check startup` reported 68–96 ms of active startup CPU in two runs. |
-| Test and tool counts of 60, 62 or 100 tests and "eight tools" | Out of date. This build has 439 tests and nine tools. |
+| Test and tool counts of 60, 62 or 100 tests and "eight tools" | Out of date. This build has 615 tests and nine tools. |
+| "Answers and reads keep working" when a free-plan Worker's quota runs out (security notes, September 27) | Narrowed on October 4. True of the daily rows-written limit only. When the daily Durable Object request limit is spent, every table tool except the listing fails for callers that send a session id. See [SECURITY-NOTES.md](SECURITY-NOTES.md). |
+| `npm audit`: "2 moderate, 0 high" (security notes, September 27) | True that day, out of date a week later: advisories published September 28 and 29 made it 8 vulnerabilities, 2 of them high. A lockfile update and Wrangler 4.147.0 brought it back to 2 moderate on October 4, and the notes now give both. |
 | Speech-recognition error fallback, late responses, remote cold starts | Risks derived from code, not observed service incidents. |
 | Cloudflare signup, payment and deploy experience | No account or deployment evidence. Nothing invented to fill the gap. |
 

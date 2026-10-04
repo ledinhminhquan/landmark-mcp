@@ -27,6 +27,7 @@ import {
   OP_WORDS,
   readDate,
   rowLabel,
+  sumCaution,
   summaryLabel,
   summaryRowsOf,
   tidy,
@@ -246,6 +247,23 @@ export function plural(n: number, one: string, many = `${one}s`): string {
 const DESCRIBE_COLUMNS = 8;
 /** The fewest it reads, however much else there is to say. */
 const DESCRIBE_COLUMNS_MIN = 3;
+/** Said after a list of columns cut short, so the listener knows how to reach the rest. */
+const MORE_COLUMNS = ' Say more for the rest.';
+
+/**
+ * The names a description lists, in order: every column with a heading. A column with
+ * none has no name to say, and is reached by its letter instead.
+ */
+export function headedColumnNames(region: IndexRegion): string[] {
+  if (region.headerRows.length === 0) return [];
+  return region.columns.filter((c) => c.path.length > 0).map((c) => cleanText(columnName(c), 60));
+}
+
+/** Spoken text, and where a continuation picks up: the first column name not yet said. */
+export interface ColumnsSpoken {
+  readonly text: string;
+  readonly next: number | null;
+}
 
 /**
  * Describe a region. `after` — the file's other tables and its warnings — is appended
@@ -259,6 +277,37 @@ const DESCRIBE_COLUMNS_MIN = 3;
  * by whole sentences so the total stays inside the thirty-second ceiling.
  */
 export function speakDescribe(region: IndexRegion, full: boolean, after = ''): string {
+  return describeRegion(region, full, after).text;
+}
+
+/** A row that sums up with a statistic rather than a total: "Average", "Max", "Trung bình". */
+const STATISTIC_LABEL = /\b(?:average|avg|mean|count|max|min|maximum|minimum|highest|lowest)\b|trung bình|bình quân|số lượng|cao nhất|thấp nhất|lớn nhất|nhỏ nhất/iu;
+
+/**
+ * Several of the sheet's own summary rows, as a listener should hear them: "2 total
+ * rows" while every one is a total, as before; otherwise by name, "the Total and Average
+ * rows", or "5 summary rows" when there are too many kinds to name. Ingest leaves
+ * Average, Count, Max and Min rows out of answers as well as totals, and "I left out 2
+ * total rows" called a budget's Average row a total. `the` puts the article before a
+ * list of names, where the sentence needs one.
+ */
+function summaryRowsSaid(region: IndexRegion, rows: Iterable<number>, the: boolean): string {
+  const list = [...rows];
+  const labels = [...new Set(list.map((i) => summaryLabel(region, i)))];
+  if (!labels.some((l) => STATISTIC_LABEL.test(l))) return `${list.length} total rows`;
+  if (labels.length <= 3) return `${the ? 'the ' : ''}${speakList(labels)} rows`;
+  return `${list.length} summary rows`;
+}
+
+/**
+ * `speakDescribe`, with where the column list stopped.
+ *
+ * A forty-column sheet was described as "Store, Region, Manager, W1 … W5 and 32 more",
+ * and nothing could say the other 32: "more" answered "That was all of it", and every
+ * other way of asking stopped at the same eight. The cut is now a place to continue
+ * from, and the list says so.
+ */
+export function describeRegion(region: IndexRegion, full: boolean, after = ''): ColumnsSpoken {
   const parts: string[] = [];
   const name = region.title ? `"${cleanText(region.title, 80)}"` : 'This table';
   const totals = summaryRowsOf(region);
@@ -266,13 +315,15 @@ export function speakDescribe(region: IndexRegion, full: boolean, after = ''): s
   const width = region.columns.filter((c) => !isGutter(c)).length;
   const first = `${name} has ${plural(records, 'row')} and ${plural(width, 'column')}.`;
 
-  const named = region.columns.filter((c) => c.path.length > 0).map((c) => cleanText(columnName(c), 60));
+  const named = headedColumnNames(region);
   const columns = (k: number): string =>
     region.headerRows.length === 0
       ? 'I am treating every row as data, with no headings.'
       : named.length === 0
         ? 'None of its columns has a heading.'
-        : `The columns are ${speakList(k < named.length ? [...named.slice(0, k), `${named.length - k} more`] : named)}.`;
+        : k < named.length
+          ? `The columns are ${speakList([...named.slice(0, k), `${named.length - k} more`])}.${MORE_COLUMNS}`
+          : `The columns are ${speakList(named)}.`;
 
   if (region.headerRows.length > 1) {
     parts.push(`They sit under ${plural(region.headerRows.length, 'level')} of headings.`);
@@ -281,11 +332,20 @@ export function speakDescribe(region: IndexRegion, full: boolean, after = ''): s
   if (totals.size === 1) {
     parts.push(`Its ${summaryLabel(region, [...totals][0]!)} row is left out of answers.`);
   } else if (totals.size > 1) {
-    parts.push(`Its ${totals.size} total rows are left out of answers.`);
+    parts.push(`Its ${summaryRowsSaid(region, totals, false)} are left out of answers.`);
   }
 
   if (full) {
     const numeric = region.columns.filter((c) => c.sum !== undefined);
+    // Said before the ranges, since it changes what a total means: a figure ingest could
+    // not read is in no answer, and a full description was the one place a listener
+    // could have learnt that, and did not.
+    for (const c of numeric) {
+      if (c.nonNumeric) parts.push(`${columnName(c)} has ${plural(c.nonNumeric, 'value')} I could not read as a number.`);
+    }
+    for (const c of region.columns.filter((x) => x.kind === 'mixed')) {
+      parts.push(`${columnName(c)} mixes text and numbers, so I cannot add it up.`);
+    }
     for (const c of numeric.slice(0, 3)) {
       parts.push(
         `${columnName(c)} runs from ${speakNumber(c.min!, c.kind)} to ${speakNumber(c.max!, c.kind)}.`,
@@ -327,7 +387,50 @@ export function speakDescribe(region: IndexRegion, full: boolean, after = ''): s
   const head = `${first} ${columns(k)}`;
   const budget = full ? SPOKEN_WORD_LIMIT : HEADLINE_WORD_LIMIT + 20;
   const extra = wholeSentences(parts.join(' '), budget - wordCount(head) - wordCount(warning) - wordCount(tail));
-  return (extra ? `${head} ${extra}` : head) + warning + (tail ? ` ${tail}` : '');
+  return {
+    text: (extra ? `${head} ${extra}` : head) + warning + (tail ? ` ${tail}` : ''),
+    next: k < named.length ? k : null,
+  };
+}
+
+/**
+ * The column names after `from`, for "more" after a description cut its list short.
+ *
+ * As many whole names as a description reads, within a word budget, then a count of
+ * the rest. Past the last name it says how many there were, never that there are none:
+ * a cursor a host made up is still not a reason to tell someone a sheet is empty.
+ */
+export function speakColumnPage(region: IndexRegion, from: number): ColumnsSpoken {
+  const named = headedColumnNames(region);
+  if (named.length === 0) {
+    return {
+      text: region.headerRows.length === 0 ? 'This table has no headings, so its columns have no names to read.' : 'None of its columns has a heading.',
+      next: null,
+    };
+  }
+  const start = Math.max(0, from);
+  if (start >= named.length) {
+    return { text: named.length === 1 ? 'That was the only column.' : `That was all ${named.length} columns.`, next: null };
+  }
+  const said: string[] = [];
+  let words = 0;
+  for (const n of named.slice(start)) {
+    const w = wordCount(n);
+    if (said.length >= DESCRIBE_COLUMNS || (said.length > 0 && words + w > HEADLINE_WORD_LIMIT + 20)) break;
+    said.push(n);
+    words += w;
+  }
+  const end = start + said.length;
+  const rest = named.length - end;
+  if (rest > 0) {
+    const lead = start === 0 ? 'The columns are' : 'The next columns are';
+    return { text: `${lead} ${speakList([...said, `${rest} more`])}.${MORE_COLUMNS}`, next: end };
+  }
+  if (start === 0) return { text: `The columns are ${speakList(said)}.`, next: null };
+  return {
+    text: said.length === 1 ? `The last column is ${said[0]}.` : `The last columns are ${speakList(said)}.`,
+    next: null,
+  };
 }
 
 /**
@@ -382,7 +485,7 @@ export function queryNotes(region: IndexRegion, q: QueryResult, totals = true): 
   if (totals && q.summarySkipped.length === 1) {
     notes += ` I left out the ${summaryLabel(region, q.summarySkipped[0]!)} row.`;
   } else if (totals && q.summarySkipped.length > 1) {
-    notes += ` I left out ${q.summarySkipped.length} total rows.`;
+    notes += ` I left out ${summaryRowsSaid(region, q.summarySkipped, true)}.`;
   }
   const byColumn = new Map<string, number>();
   const wanted = new Map<string, string>();
@@ -444,7 +547,7 @@ function onlyTotals(region: IndexRegion, q: QueryResult): string {
     );
   }
   return (
-    `The only rows that match are the sheet's own ${rows.length} total rows, which I leave out of answers.` +
+    `The only rows that match are the sheet's own ${summaryRowsSaid(region, rows, false)}, which I leave out of answers.` +
     ` To hear them, ask me to read from row ${rows[0]! + 1}.`
   );
 }
@@ -465,7 +568,8 @@ export function winnerLabels(region: IndexRegion, rows: readonly number[]): stri
   return rows.map((i) => rowLabel(region, i) ?? `row ${region.firstDataRow + i + 1}`);
 }
 
-type SpokenSpec = { aggregate?: string; aggregateColumn?: string; groupBy?: string; order?: 'desc' | 'asc' };
+/** `from` is where this page of a breakdown starts among all its groups: 0, or a cursor. */
+type SpokenSpec = { aggregate?: string; aggregateColumn?: string; groupBy?: string; order?: 'desc' | 'asc'; from?: number };
 
 /**
  * A breakdown's groups, as many whole as fit the budget, and how many that was.
@@ -490,8 +594,26 @@ export function fitGroups(
   const what = agg === 'max' ? `Highest ${name}` : agg === 'min' ? `Lowest ${name}` : agg === 'avg' ? `Average ${name}` : '';
   // Largest first is what a breakdown is heard as; the other way round is said, or
   // "Design, 234 thousand and Engineering, 560 thousand" sounds like the top spender.
-  const asc = spec.order === 'asc' && q.groups.length > 1;
-  const lead = what ? `${what}${asc ? ', lowest first' : ''}: ` : asc ? 'Lowest first: ' : '';
+  // Decided by the whole breakdown, not this page: the last page of a lowest-first
+  // ranking may hold one group, and was led "Lowest GDP per capita: Norway" — the
+  // highest of them all, introduced as the lowest.
+  const asc = spec.order === 'asc' && Math.max(q.groupCount, q.groups.length) > 1;
+  // A later page goes on from one already heard, which said the order. Said again over
+  // the largest figures, "lowest first" sounded as though they were the lowest.
+  const later = (spec.from ?? 0) > 0;
+  // One row to each group ("rank the countries from lowest to highest"): each figure is
+  // that row's own value, so the column is named on its own. "Highest GDP per capita,
+  // lowest first" told the listener two opposite things about one list, and "Highest
+  // GDP per capita: Peru, …" on a second page called the middle of the list its top.
+  const plain = q.oneRowEach && what !== '' && (asc || later);
+  const order = asc && !later ? ', lowest first' : '';
+  const lead = plain
+    ? `${name}${order}: `
+    : what
+      ? `${what}${order}: `
+      : order
+        ? 'Lowest first: '
+        : '';
   const items = q.groups.map((g) =>
     agg === 'count'
       ? `${groupName(g.key, q.groupColumn)}, ${plural(g.value ?? 0, 'row')}`
@@ -508,6 +630,38 @@ export function fitGroups(
   }
   const more = q.moreAvailable || kept.length < items.length;
   return { text: `${lead}${speakList(kept)}.${more ? rest : ''}`, count: kept.length, more };
+}
+
+/**
+ * A computed figure as an answer says it. Over one row the answer is that row's cell,
+ * and is read exactly, like any cell: "about 88 thousand" for Norway's 87,962 rounded a
+ * figure nobody had to add up.
+ */
+function spokenFigure(value: number, counted: number, target: IndexColumn | null): string {
+  return counted === 1 ? exactCell(value) + (SYMBOL[target?.kind ?? ''] ?? '') : speakAmount(value, target?.kind);
+}
+
+/**
+ * What an answer was, in a few words: "690 thousand, the total of Amount for Salaries".
+ *
+ * Kept with the answer's working, so an explanation asked for after other questions
+ * can say which answer it is about. "How do you know" after a refused question used to
+ * read back the cells of the answer before it, and nothing in the reply said so: the
+ * listener heard cells for a question those cells had nothing to do with. `conditions`
+ * is the rows it covered, as " for Salaries", or empty.
+ */
+export function answerAbout(spec: SpokenSpec, target: IndexColumn | null, q: QueryResult, conditions = ''): string {
+  const agg = spec.aggregate ?? 'none';
+  const by = q.groupColumn ? ` by ${columnName(q.groupColumn)}` : '';
+  if (agg === 'none') return conditions ? `the rows${conditions}` : 'the rows I read';
+  if (agg === 'count') {
+    return by ? `the count of rows${by}${conditions}` : `the count of ${plural(q.result ?? 0, 'row')}${conditions}`;
+  }
+  const name = target ? columnName(target) : 'that column';
+  const what =
+    agg === 'sum' ? `the total of ${name}` : agg === 'avg' ? `the average of ${name}` : agg === 'max' ? `the highest ${name}` : `the lowest ${name}`;
+  if (by || q.result === null) return `${what}${by}${conditions}`;
+  return `${spokenFigure(q.result, q.provenance.cellCount, target)}, ${what}${conditions}`;
 }
 
 export function speakQuery(
@@ -562,11 +716,12 @@ export function speakQuery(
       agg === 'sum' ? 'the total of' : agg === 'avg' ? 'the average of' : agg === 'max' ? 'the highest' : 'the lowest';
     const who = agg === 'max' || agg === 'min' ? winnerPhrase(winnerLabels(region, q.winners), q.winnerCount) : '';
     const counted = q.provenance.cellCount;
-    // Over one row the answer is that row's cell, and is read exactly, like any cell:
-    // "about 88 thousand" for Norway's 87,962 rounded a figure nobody had to add up.
-    const figure =
-      counted === 1 ? exactCell(q.result) + (SYMBOL[target?.kind ?? ''] ?? '') : speakAmount(q.result, target?.kind);
-    const base = `${sentence(figure)}${who}. That is ${verb} ${name} across ${plural(counted, 'row')}.`;
+    // A total of figures that are each already an average, or per person, may or may not
+    // be a real one: it is given, as asked, with what was added up said plainly.
+    const caution = agg === 'sum' && counted > 1 && target ? sumCaution(target, region) : null;
+    const base = caution
+      ? `${sentence(spokenFigure(q.result, counted, target))}. That adds up ${name} across ${plural(counted, 'row')}, each of them ${caution.replace(/^already /, '')}.`
+      : `${sentence(spokenFigure(q.result, counted, target))}${who}. That is ${verb} ${name} across ${plural(counted, 'row')}.`;
     return capWords(base + excludedPhrase(q.provenance.excluded), SPOKEN_WORD_LIMIT) + notes;
   }
 
@@ -654,7 +809,7 @@ function speakRowRuns(cells: readonly string[], maxItems: number): { text: strin
  * misnames half the evidence — which defeats the only mechanism a listener has for
  * checking a number they cannot see.
  */
-export function speakExplain(parts: readonly ExplainPart[]): string {
+export function speakExplain(parts: readonly ExplainPart[], budget = SPOKEN_WORD_LIMIT): string {
   if (parts.length === 0 || parts.every((p) => p.totalCells === 0)) {
     return 'That answer did not read any cells — it came from the row count alone.';
   }
@@ -721,7 +876,7 @@ export function speakExplain(parts: readonly ExplainPart[]): string {
       ? describe(parts[0]!, false)
       : parts.map((p) => describe(p, true)).join(' ');
 
-  return capWords(text, SPOKEN_WORD_LIMIT);
+  return capWords(text, budget);
 }
 
 /**

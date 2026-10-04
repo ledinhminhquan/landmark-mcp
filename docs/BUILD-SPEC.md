@@ -1,10 +1,10 @@
 # Landmark — Implementation-Ready Build Spec
 
-> **Read this first (banner added September 27, 2026).** This is the original plan, committed
-> on September 8, 2026, before the product existed. The body below is kept as it was written,
-> apart from a few lines corrected on September 18 (the registry claim in §1 and §8, and the
-> tool count in §3 and §9). It is a record of intent, not a description of the code. Where the body and the code
-> disagree, the code and the list below are right.
+> **Read this first (banner added September 27, 2026, updated October 4).** This is the
+> original plan, committed on September 8, 2026, before the product existed. The body below is
+> kept as it was written, apart from a few lines corrected on September 18 (the registry claim
+> in §1 and §8, and the tool count in §3 and §9). It is a record of intent, not a description
+> of the code. Where the body and the code disagree, the code and the list below are right.
 >
 > Claims and plans that were later corrected or changed:
 >
@@ -42,15 +42,18 @@
 >   runs; Wrangler notes that local CPU differs from Cloudflare's.
 > - **"The edge bundle contains the MCP SDK and Zod and nothing else" (§4).** It also contains
 >   the SDK's own dependencies. ExcelJS and PapaParse are indeed absent. A dry-run build of
->   the current code is about 970 KiB (195 KiB gzipped).
+>   the current code is about 1,000 KiB (204 KiB gzipped).
+> - **SDK 1.30.0, pinned (§4).** Used until October 4, 2026. The project now pins 1.32.0, which
+>   answers a `tools/call` sent without `arguments` (1.30.0 refused it) and is covered by none of
+>   the SDK's published security advisories. Both declare 2025-11-25 as the latest revision.
 > - **Node 24 LTS (§4, §9).** Not adopted. The package requires Node 22.7 or later; development
 >   and tests ran on Node 23.11.
 > - **The MCP App widget through `@modelcontextprotocol/ext-apps` 1.7.5 (§6).** That package was
 >   not installed. The widget is written against the core SDK's `_meta` support and served as a
 >   `ui://` resource, and it has not been tried in a real MCP Apps host.
-> - **Deployment as a day-one task (§7, §9).** Nothing has been deployed as of September 27. The
->   hackathon FAQ says a locally runnable public repository plus the demo video is enough for
->   the Alexa+ track.
+> - **Deployment as a day-one task (§7, §9).** Nothing has been deployed as of October 4. The
+>   hackathon FAQ, checked October 4, says a locally runnable public repository plus the demo
+>   video is enough for the Alexa+ track.
 > - **Demo plan (§8).** Replaced by `docs/DEMO-SCRIPT.md`. Do not film Excel or a screen reader:
 >   the rules forbid third-party trademarks without permission, and no screen-reader footage was
 >   ever made or tested for this project.

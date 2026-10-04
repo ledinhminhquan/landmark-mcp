@@ -30,7 +30,7 @@
     "serve": "node --experimental-strip-types src/local.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.30.0",
+    "@modelcontextprotocol/sdk": "1.32.0",
     "exceljs": "4.4.0",
     "papaparse": "5.7.0",
     "zod": "3.25.76"
@@ -39,7 +39,7 @@
     "@types/node": "22.10.2",
     "@types/papaparse": "5.3.15",
     "typescript": "5.7.2",
-    "wrangler": "4.134.0"
+    "wrangler": "4.147.0"
   },
   "keywords": [
     "mcp",

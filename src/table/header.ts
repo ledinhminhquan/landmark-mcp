@@ -26,7 +26,7 @@
  * identity, and `explain` can read the path back on demand.
  */
 
-import { a1, isBlank, isPivotHeading, type CellValue, type MergeSpan } from './model.ts';
+import { a1, isBlank, isColumnNumbering, isPivotHeading, type CellValue, type MergeSpan } from './model.ts';
 import { headerSignals, speakDate, type Grid, type HeaderSignals } from './infer.ts';
 
 /** Where a cell's value came from, so we never silently invent data. */
@@ -361,13 +361,19 @@ export function analyseHeader(
 
   const deepest = signals[last]!;
   const deepestScore = effective(last);
-  const rows = last + 1;
+  // A Vietnamese form numbers its columns in the row under its headings: "(1) | (2) |
+  // (3)". Those are accounting negatives to a cell-by-cell reader, so the row scores as
+  // figures and was read as the first record — a row of negatives in every column. As a
+  // row it is plainly part of the headings.
+  const numbered =
+    last + 1 < MAX_HEADER_ROWS && signals.length > last + 1 && isColumnNumbering(slice(startRow + last + 1));
+  const rows = last + 1 + (numbered ? 1 : 0);
 
   // Three ways to end up with more than one header row, and the reason spoken aloud
   // should say which one actually happened rather than asserting the last branch.
   const groupingAbove = best > 0;
-  const why =
-    rows === 1
+  const reason =
+    last === 0
       ? deepest.discontinuity > 0
         ? 'labels sit above values of a different kind'
         : 'the first row reads as labels'
@@ -376,6 +382,7 @@ export function analyseHeader(
         : groupingAbove
           ? 'headings are stacked above the row that names the values'
           : `${extendedBy}, over a row of labels`;
+  const why = numbered ? `${reason}, and the row under them numbers the columns` : reason;
 
   const chosen: HeaderCandidate = { rows, score: deepestScore, why };
 

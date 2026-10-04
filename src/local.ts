@@ -133,9 +133,13 @@ function toRequest(req: IncomingMessage): Request {
 }
 
 /** Web Response → node:http response, streaming the body rather than buffering it. */
-async function send(res: ServerResponse, out: Response): Promise<void> {
+async function send(req: IncomingMessage, res: ServerResponse, out: Response): Promise<void> {
   res.statusCode = out.status;
   out.headers.forEach((value, key) => res.setHeader(key, value));
+  // A reply sent before the request body was read — the 413 for an oversized body — must
+  // not leave the unread body on a keep-alive socket, where the next request waited
+  // behind it and timed out.
+  if (!req.complete) res.setHeader('connection', 'close');
   if (!out.body) {
     res.end();
     return;
@@ -216,7 +220,7 @@ createHttpServer((req, res) => {
     .then((served) => {
       if (served) return;
       return handle(toRequest(req))
-        .then((out) => send(res, out));
+        .then((out) => send(req, res, out));
     })
     .catch((err: unknown) => {
       console.error(err);
